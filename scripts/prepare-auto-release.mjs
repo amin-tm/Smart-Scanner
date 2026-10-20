@@ -13,46 +13,51 @@ if (!repository || !/^[-\w.]+\/[-\w.]+$/.test(releaseRepo || '')) {
 if (privateSource && releaseRepo === repository) {
   throw new Error('The source repo is private. Use a separate PUBLIC Releases repo and set UPDATE_RELEASE_REPOSITORY.');
 }
-// Recover the public key when copied through GitHub variables as one line,
-// JSON-escaped text, or literal \n. Never log the key itself.
-let rawPublicKey = String(pubkey ?? '').trim().replace(/^\uFEFF/, '');
-try {
-  if (/^"[\s\S]*"$/.test(rawPublicKey)) {
-    const parsed = JSON.parse(rawPublicKey);
-    if (typeof parsed === 'string') rawPublicKey = parsed;
-  }
-} catch { /* Ignore malformed JSON quoting. */ }
-rawPublicKey = rawPublicKey.replace(/\\r\\n|\\n|\\r/g, '\n');
-const keyTokens = rawPublicKey.match(/RW[A-Za-z0-9+/]{54}/g) || [];
-const distinctKeys = [...new Set(keyTokens)];
-const decodedKeys = distinctKeys.filter((candidate) => {
+// Tauri CLI stores the Minisign public-key text as BASE64 in the .key.pub
+// file. The updater config requires this OUTER base64 string, not the raw
+// `untrusted comment: ...` / `RW...` text. Never prepend `RW` yourself.
+const suppliedPubkey = String(pubkey ?? '').trim().replace(/^\uFEFF/, '');
+let candidate = suppliedPubkey;
+if (/^"[\s\S]*"$/.test(candidate)) {
   try {
-    const bytes = Buffer.from(candidate, 'base64');
-    return bytes.length === 42 && bytes.toString('base64') === candidate;
-  } catch { return false; }
-});
-const normalizedPubkey = decodedKeys.length === 1
-  ? `untrusted comment: minisign public key\n${decodedKeys[0]}`
-  : '';
-const diagnostic = [
-  `supplied=${Boolean(rawPublicKey)}`,
-  `length=${rawPublicKey.length}`,
-  `lines=${rawPublicKey.split(/\r?\n/).length}`,
-  `has_RW_prefix=${rawPublicKey.includes('RW')}`,
-  `key_candidates=${distinctKeys.length}`,
-  `valid_key_candidates=${decodedKeys.length}`,
-].join('; ');
-console.log(`[Updater key check] ${diagnostic}`);
-if (!rawPublicKey) {
-  throw new Error('TAURI_UPDATER_PUBLIC_KEY is empty in this job. Check workflow env and GitHub Actions Variables.');
+    const parsed = JSON.parse(candidate);
+    if (typeof parsed === 'string') candidate = parsed.trim();
+  } catch { /* Leave it unchanged so validation rejects it safely. */ }
 }
-if (rawPublicKey.includes('REPLACE_') || decodedKeys.length !== 1) {
+
+// Support the normal Tauri-generated Base64 value, and also raw Minisign
+// text if it was copied from a decoded file. Always write Base64 to config.
+function minisignKeyTextValid(input) {
+  const lines = input.replace(/\r\n/g, '\n').trim().split('\n');
+  if (lines.length !== 2 || !lines[0].startsWith('untrusted comment: ')) return false;
+  const line = lines[1].trim();
+  if (!/^RW[A-Za-z0-9+/]{54}$/.test(line)) return false;
+  const key = Buffer.from(line, 'base64');
+  return key.length === 42 && key.subarray(0, 2).toString('ascii') === 'Ed' && key.toString('base64') === line;
+}
+
+let normalizedPubkey = '';
+let detectedFormat = 'invalid';
+const cleanCandidate = candidate.replace(/\r/g, '').replace(/\n$/, '');
+if (/^[A-Za-z0-9+/]+={0,2}$/.test(cleanCandidate)) {
+  const decoded = Buffer.from(cleanCandidate, 'base64');
+  if (decoded.toString('base64') === cleanCandidate && minisignKeyTextValid(decoded.toString('utf8'))) {
+    normalizedPubkey = cleanCandidate;
+    detectedFormat = 'tauri-base64';
+  }
+}
+if (!normalizedPubkey) {
+  const raw = candidate.replace(/\\r\\n|\\n|\\r/g, '\n').replace(/\r/g, '');
+  if (minisignKeyTextValid(raw)) {
+    normalizedPubkey = Buffer.from(raw.trim() + '\n', 'utf8').toString('base64');
+    detectedFormat = 'minisign-text-converted';
+  }
+}
+console.log(`[Updater key check] supplied=${Boolean(candidate)}; length=${candidate.length}; format=${detectedFormat}`);
+if (!normalizedPubkey || candidate.includes('REPLACE_')) {
   throw new Error(
-    'TAURI_UPDATER_PUBLIC_KEY is not a recognizable Minisign public key. ' +
-    'Set the value to the FULL TEXT of the .key.pub file: ' +
-    'untrusted comment: minisign public key, followed by the RW... line. ' +
-    'Do not paste a path, private key, password, or GitHub expression. ' +
-    'See [Updater key check] for safe diagnostics.'
+    'TAURI_UPDATER_PUBLIC_KEY is invalid. Restore the EXACT original contents of the Tauri-generated .key.pub file ' +
+    '(usually begins with dW50cnVzdGVk). Do not prepend RW, decode it, or use the private key or password.'
   );
 }
 if (!Number.isSafeInteger(runNumber) || runNumber < 1) {
