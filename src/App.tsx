@@ -8,6 +8,7 @@ import Stage from './components/Stage';
 import FilterModal from './components/FilterModal';
 import PagesDrawer from './components/PagesDrawer';
 import SettingsDialog from './components/SettingsDialog';
+import AutoUpdateNotice from './components/AutoUpdateNotice';
 import { DropOverlay, ErrorToast, ExportOverlay, ResultToast } from './components/Overlays';
 import { Presence, Spinner, cx } from './components/ui';
 import { useScanner } from './lib/useScanner';
@@ -276,6 +277,8 @@ export default function App() {
             {pages.length > 0 && exportBtn('!px-4 !py-1.5 text-xs')}
           </div>
         </header>
+
+        <AutoUpdateNotice hasWork={pages.length > 0 || busy || Boolean(sc.exporting)} />
 
         {/* Main Canvas Body */}
         <main className="min-h-0 flex-1 px-3 pb-3 pt-2 sm:px-4 sm:pb-4 overflow-hidden flex flex-col">
