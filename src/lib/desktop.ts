@@ -63,3 +63,17 @@ export function downloadBlob(data: Uint8Array, filename: string) {
   a.remove();
   setTimeout(() => URL.revokeObjectURL(url), 30000);
 }
+
+/** Updater is registered in Rust to avoid a second JS/Tauri dependency. */
+export async function checkUpdate(): Promise<string | null> {
+  const c = core();
+  if (!c) return null;
+  return c.invoke<string | null>('check_update');
+}
+
+/** This will exit the Windows app once the signed update installer starts. */
+export async function installUpdate(): Promise<boolean> {
+  const c = core();
+  if (!c) return false;
+  return c.invoke<boolean>('install_update');
+}
