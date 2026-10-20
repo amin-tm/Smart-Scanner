@@ -13,32 +13,46 @@ if (!repository || !/^[-\w.]+\/[-\w.]+$/.test(releaseRepo || '')) {
 if (privateSource && releaseRepo === repository) {
   throw new Error('The source repo is private. Use a separate PUBLIC Releases repo and set UPDATE_RELEASE_REPOSITORY.');
 }
-// GitHub Actions variables may contain a real newline or literal \n after copy/paste.
-// Do not expose the key material in build logs.
-const normalizedPubkey = String(pubkey ?? '')
-  .replace(/^\uFEFF/, '')
-  .replace(/\\r\\n|\\n|\\r/g, '\n')
-  .trim();
-const publicKeyLines = normalizedPubkey.split(/\r?\n/).map(line => line.trim());
-const keyLine = publicKeyLines.find(line => /^RW[A-Za-z0-9+/=]{20,}$/.test(line));
-console.log(
-  `[Updater key check] supplied=${Boolean(pubkey && pubkey.trim())}; ` +
-  `length=${normalizedPubkey.length}; lines=${publicKeyLines.length}; ` +
-  `minisign_key_found=${Boolean(keyLine)}`
-);
-if (!normalizedPubkey) {
-  throw new Error(
-    'TAURI_UPDATER_PUBLIC_KEY is EMPTY in this GitHub Actions job. ' +
-    'Check Settings > Secrets and variables > Actions > Variables, and confirm ' +
-    'the workflow step has env: TAURI_UPDATER_PUBLIC_KEY: ${{ vars.TAURI_UPDATER_PUBLIC_KEY }}. ' +
-    'If it is an Environment variable, the job must declare the same environment.'
-  );
+// Recover the public key when copied through GitHub variables as one line,
+// JSON-escaped text, or literal \n. Never log the key itself.
+let rawPublicKey = String(pubkey ?? '').trim().replace(/^\uFEFF/, '');
+try {
+  if (/^"[\s\S]*"$/.test(rawPublicKey)) {
+    const parsed = JSON.parse(rawPublicKey);
+    if (typeof parsed === 'string') rawPublicKey = parsed;
+  }
+} catch { /* Ignore malformed JSON quoting. */ }
+rawPublicKey = rawPublicKey.replace(/\\r\\n|\\n|\\r/g, '\n');
+const keyTokens = rawPublicKey.match(/RW[A-Za-z0-9+/]{54}/g) || [];
+const distinctKeys = [...new Set(keyTokens)];
+const decodedKeys = distinctKeys.filter((candidate) => {
+  try {
+    const bytes = Buffer.from(candidate, 'base64');
+    return bytes.length === 42 && bytes.toString('base64') === candidate;
+  } catch { return false; }
+});
+const normalizedPubkey = decodedKeys.length === 1
+  ? `untrusted comment: minisign public key\n${decodedKeys[0]}`
+  : '';
+const diagnostic = [
+  `supplied=${Boolean(rawPublicKey)}`,
+  `length=${rawPublicKey.length}`,
+  `lines=${rawPublicKey.split(/\r?\n/).length}`,
+  `has_RW_prefix=${rawPublicKey.includes('RW')}`,
+  `key_candidates=${distinctKeys.length}`,
+  `valid_key_candidates=${decodedKeys.length}`,
+].join('; ');
+console.log(`[Updater key check] ${diagnostic}`);
+if (!rawPublicKey) {
+  throw new Error('TAURI_UPDATER_PUBLIC_KEY is empty in this job. Check workflow env and GitHub Actions Variables.');
 }
-if (normalizedPubkey.includes('REPLACE_') || !keyLine) {
+if (rawPublicKey.includes('REPLACE_') || decodedKeys.length !== 1) {
   throw new Error(
-    'TAURI_UPDATER_PUBLIC_KEY reached the script but is not a valid minisign public-key text. ' +
-    'Paste the full contents of the .key.pub file (untrusted comment line + RW... line); ' +
-    'not its file path, private key or password.'
+    'TAURI_UPDATER_PUBLIC_KEY is not a recognizable Minisign public key. ' +
+    'Set the value to the FULL TEXT of the .key.pub file: ' +
+    'untrusted comment: minisign public key, followed by the RW... line. ' +
+    'Do not paste a path, private key, password, or GitHub expression. ' +
+    'See [Updater key check] for safe diagnostics.'
   );
 }
 if (!Number.isSafeInteger(runNumber) || runNumber < 1) {
