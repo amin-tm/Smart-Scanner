@@ -67,7 +67,7 @@ export function Modal({ title, onClose, children, width = 'max-w-xl' }: { title:
   return (
     <div className="a-fade-in fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm" onMouseDown={onClose}>
       <div
-        className={cx('a-pop glass flex max-h-[90vh] w-full flex-col overflow-hidden rounded-3xl shadow-2xl shadow-black/60', width)}
+        className={cx('app-modal-surface a-pop glass flex max-h-[90vh] w-full flex-col overflow-hidden rounded-3xl shadow-2xl shadow-black/60', width)}
         style={{ background: 'rgba(12,18,34,0.92)' }}
         onMouseDown={(e) => e.stopPropagation()}
       >
