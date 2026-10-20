@@ -15,6 +15,8 @@ import { useScanner } from './lib/useScanner';
 import { appReady, setBackgroundMode } from './lib/desktop';
 import { faNum } from './lib/storage';
 import { DEFAULT_ADJUST, type Adjust, type FilterId } from './lib/types';
+import ThemeToggle from './components/ThemeToggle';
+
 
 export default function App() {
   const sc = useScanner();
@@ -184,7 +186,7 @@ export default function App() {
       <div className="relative z-10 flex h-full flex-col min-h-0">
         {/* Header - Single line, never wraps */}
         <header
-          className="relative mx-3 mt-3 flex shrink-0 items-center gap-3 rounded-2xl border border-white/10 px-4 py-2.5 backdrop-blur-xl sm:mx-4 sm:mt-4 shadow-lg shadow-black/40"
+          className="app-header relative mx-3 mt-3 flex shrink-0 items-center gap-3 rounded-2xl border border-white/10 px-4 py-2.5 backdrop-blur-xl sm:mx-4 sm:mt-4 shadow-lg shadow-black/40"
           style={{ background: 'rgba(9, 14, 27, 0.72)' }}
         >
           <div className="hairline absolute inset-x-6 bottom-0 h-px opacity-70" />
@@ -264,6 +266,8 @@ export default function App() {
                 <Palette className="h-4 w-4 text-teal-300" />
               </button>
             )}
+
+            <ThemeToggle />
 
             <button
               className="btn btn-icon !p-2 text-slate-400 hover:text-white"
