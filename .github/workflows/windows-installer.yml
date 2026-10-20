@@ -1,33 +1,68 @@
-name: Build Windows installer
+name: Publish SmartScanner Auto Update
 
 on:
   push:
-    branches: [main, master]
+    branches: [main]
   workflow_dispatch:
+
+permissions:
+  contents: write
+
+# Never publish two releases at the same time.
+concurrency:
+  group: smartscanner-auto-release
+  cancel-in-progress: false
 
 jobs:
   windows:
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout private source
+        uses: actions/checkout@v4
 
-      - uses: actions/setup-node@v4
+      - name: Set up Node
+        uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: '22'
           cache: npm
 
-      - uses: dtolnay/rust-toolchain@stable
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
 
-      - uses: swatinem/rust-cache@v2
+      - name: Cache Rust builds
+        uses: swatinem/rust-cache@v2
         with:
           workspaces: src-tauri
 
-      - run: npm ci
+      - name: Install frontend packages
+        run: npm ci
 
-      # builds the web app (beforeBuildCommand) and the NSIS installer
-      - run: npx tauri build
+      - name: Configure signed updater and increasing version
+        id: release_config
+        run: node scripts/prepare-auto-release.mjs
+        env:
+          TAURI_UPDATER_PUBLIC_KEY: ${{ vars.TAURI_UPDATER_PUBLIC_KEY }}
+          UPDATE_RELEASE_REPOSITORY: ${{ vars.UPDATE_RELEASE_REPOSITORY }}
+          SOURCE_REPO_PRIVATE: ${{ github.event.repository.private }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          GITHUB_RUN_NUMBER: ${{ github.run_number }}
 
-      - uses: actions/upload-artifact@v4
+      - name: Publish signed NSIS installer, signature and latest.json
+        uses: tauri-apps/tauri-action@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.RELEASE_TOKEN || secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
-          name: SmartScanner-Setup
-          path: src-tauri/target/release/bundle/nsis/*.exe
+          owner: ${{ steps.release_config.outputs.owner }}
+          repo: ${{ steps.release_config.outputs.repo }}
+          releaseCommitish: main
+          tagName: v__VERSION__
+          releaseName: 'Smart Scanner v__VERSION__'
+          releaseBody: 'Automatic Windows update and installer. Existing clients update automatically.'
+          releaseDraft: false
+          prerelease: false
+          uploadUpdaterJson: true
+          updaterJsonPreferNsis: true
+          uploadUpdaterSignatures: true
+          uploadWorkflowArtifacts: true
