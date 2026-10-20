@@ -17,6 +17,7 @@ use tauri::{
 use tauri_plugin_autostart::{MacosLauncher, ManagerExt as AutostartExt};
 use tauri_plugin_dialog::DialogExt;
 use tauri_plugin_opener::OpenerExt;
+use tauri_plugin_updater::UpdaterExt;
 
 struct Flags {
     /// closing the window hides it to the tray instead of quitting
@@ -188,6 +189,29 @@ fn quit_app(app: AppHandle) {
     app.exit(0);
 }
 
+/// Queries the signed update feed.  None means that this installation is current.
+#[tauri::command]
+async fn check_update(app: AppHandle) -> Result<Option<String>, String> {
+    let updater = app.updater().map_err(|e| e.to_string())?;
+    let available = updater.check().await.map_err(|e| e.to_string())?;
+    Ok(available.map(|release| release.version))
+}
+
+/// Re-checks and installs only a signed, newer release. The Windows NSIS updater
+/// exits this application as part of the installation process.
+#[tauri::command]
+async fn install_update(app: AppHandle) -> Result<bool, String> {
+    let updater = app.updater().map_err(|e| e.to_string())?;
+    let Some(release) = updater.check().await.map_err(|e| e.to_string())? else {
+        return Ok(false);
+    };
+    release
+        .download_and_install(|_, _| {}, || {})
+        .await
+        .map_err(|e| e.to_string())?;
+    Ok(true)
+}
+
 fn main() {
     let hidden_start = std::env::args().any(|a| a == "--hidden");
 
@@ -196,6 +220,7 @@ fn main() {
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
             show_main(app);
         }))
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_autostart::init(MacosLauncher::LaunchAgent, Some(vec!["--hidden"])))
@@ -214,7 +239,9 @@ fn main() {
             set_background_mode,
             get_autostart,
             set_autostart,
-            quit_app
+            quit_app,
+            check_update,
+            install_update
         ])
         .setup(|app| {
             // First launch after installation: register a hidden "run with Windows"
