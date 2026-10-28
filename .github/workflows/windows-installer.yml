@@ -35,6 +35,11 @@ jobs:
       - name: Install frontend packages
         run: npm ci
 
+      - name: Check types and document-corner regressions
+        run: |
+          npm run typecheck
+          npm run test:detection
+
       - name: Configure signed updater and increasing version
         id: release_config
         run: node scripts/prepare-auto-release.mjs

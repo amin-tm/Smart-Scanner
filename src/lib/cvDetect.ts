@@ -15,6 +15,7 @@
 import type { Pt, Quad } from './types';
 import { FULL_QUAD } from './types';
 import { clamp, dist, isConvex, orderQuad, polygonArea, quadAngles } from './imageproc';
+import { isFullPageScan, refineDocumentQuad } from './refine';
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 type CV = any;
@@ -135,13 +136,14 @@ interface ScoreCtx {
   compN: number;
   sat: Uint8Array;
   lum: Float32Array;
+  rgb: Uint8Array;
   mag: Float32Array;
   gx: Float32Array;
   gy: Float32Array;
   magThr: number;
 }
 
-function buildScoreCtx(gray: Uint8Array, sat: Uint8Array, W: number, H: number): ScoreCtx {
+function buildScoreCtx(gray: Uint8Array, sat: Uint8Array, rgb: Uint8Array, W: number, H: number): ScoreCtx {
   const N = W * H;
   const lum = new Float32Array(N);
   for (let i = 0; i < N; i++) lum[i] = gray[i];
@@ -165,7 +167,7 @@ function buildScoreCtx(gray: Uint8Array, sat: Uint8Array, W: number, H: number):
     acc += hist[k];
     if (acc >= total * 0.85) { thr = Math.max(4, k); break; }
   }
-  return { W, H, paper: new Uint8Array(N), comp: null, compN: 0, sat, lum, mag, gx, gy, magThr: thr };
+  return { W, H, paper: new Uint8Array(N), comp: null, compN: 0, sat, lum, rgb, mag, gx, gy, magThr: thr };
 }
 
 function onBorder(a: Pt, b: Pt, W: number, H: number): boolean {
@@ -187,6 +189,7 @@ function sideStats(c: ScoreCtx, a: Pt, b: Pt, cx: number, cy: number): { support
   const probe = Math.max(4, Math.round(Math.max(W, H) * 0.012));
   let valid = 0, hits = 0;
   const deltas: number[] = [];
+  const colorDeltas: number[] = [];
   for (let k = 0; k < K; k++) {
     const t = 0.08 + (0.84 * (k + 0.5)) / K;
     const px = a.x + (b.x - a.x) * t, py = a.y + (b.y - a.y) * t;
@@ -209,12 +212,16 @@ function sideStats(c: ScoreCtx, a: Pt, b: Pt, cx: number, cy: number): { support
     const ox = Math.round(px + nx * probe), oy = Math.round(py + ny * probe);
     if (ix >= 0 && iy >= 0 && ix < W && iy < H && ox >= 0 && oy >= 0 && ox < W && oy < H) {
       deltas.push(lum[iy * W + ix] - lum[oy * W + ox]);
+      const a = (iy * W + ix) * 3, b = (oy * W + ox) * 3;
+      colorDeltas.push(Math.hypot(c.rgb[a] - c.rgb[b], c.rgb[a + 1] - c.rgb[b + 1], c.rgb[a + 2] - c.rgb[b + 2]) / Math.sqrt(3));
     }
   }
   if (valid < K * 0.4) return { support: 0.4, contrast: 0.4 };
   deltas.sort((p, q) => p - q);
   const med = deltas.length ? deltas[deltas.length >> 1] : 0;
-  return { support: hits / valid, contrast: clamp(Math.abs(med) / 40, 0, 1) * (med >= 0 ? 1 : 0.75) };
+  colorDeltas.sort((a, b) => a - b);
+  const colorContrast = colorDeltas.length ? colorDeltas[colorDeltas.length >> 1] : 0;
+  return { support: hits / valid, contrast: clamp(Math.max(Math.abs(med), colorContrast) / 40, 0, 1) * (med >= 0 ? 1 : 0.75) };
 }
 
 function insideQuad(q: Quad, x: number, y: number): boolean {
@@ -265,17 +272,17 @@ function scoreQuad(c: ScoreCtx, q: Quad): number {
   const { W, H } = c;
   if (!isConvex(q)) return -1;
   const area = polygonArea(q) / (W * H);
-  if (area < 0.06 || area > 0.995) return -1;
+  if (area < 0.025 || area > 0.995) return -1;
   const [mn, mx] = quadAngles(q);
-  if (mn < 40 || mx > 140) return -1;
+  if (mn < 25 || mx > 155) return -1;
   const lens = [0, 1, 2, 3].map((s) => dist(q[s], q[(s + 1) % 4]));
-  if (Math.min(...lens) < 0.12 * Math.min(W, H)) return -1;
+  if (Math.min(...lens) < 0.045 * Math.min(W, H)) return -1;
   // a photographed sheet keeps opposite sides comparable (perspective limits)
   const r1 = Math.max(lens[0], lens[2]) / Math.max(1, Math.min(lens[0], lens[2]));
   const r2 = Math.max(lens[1], lens[3]) / Math.max(1, Math.min(lens[1], lens[3]));
-  if (r1 > 2.4 || r2 > 2.4) return -1;
+  if (r1 > 4 || r2 > 4) return -1;
   const aspect = (lens[0] + lens[2]) / Math.max(1, lens[1] + lens[3]);
-  if (aspect < 0.33 || aspect > 3) return -1;
+  if (aspect < 0.1 || aspect > 10) return -1;
   const cx = (q[0].x + q[1].x + q[2].x + q[3].x) / 4, cy = (q[0].y + q[1].y + q[2].y + q[3].y) / 4;
   let sup = 0, minSup = 1, con = 0, borders = 0, real = 0;
   for (let s = 0; s < 4; s++) {
@@ -287,6 +294,9 @@ function scoreQuad(c: ScoreCtx, q: Quad): number {
   }
   if (real === 0) return 0.05; // the whole frame: weakest possible answer
   sup /= real; con /= real;
+  // Dense text/table contours have gradients but no sustained contrast
+  // between the paper and its surroundings. Do not crop to the text block.
+  if (con < 0.12) return -1;
   // rectangularity: perspective keeps opposite angles similar
   const regularity = 1 - Math.min(1, (Math.max(Math.abs(mn - 90), Math.abs(mx - 90)) / 50));
   let score = 0.34 * sup + 0.2 * minSup + 0.22 * con + 0.08 * regularity + 0.16 * Math.min(1, area / 0.4);
@@ -336,8 +346,8 @@ export function detectWithCV(cv: CV, img: { data: Uint8ClampedArray; width: numb
       cd[i] = Math.min(255, Math.hypot(rd[p] - bR, rd[p + 1] - bG, rd[p + 2] - bB) * 1.4);
     }
 
-    const ctx = buildScoreCtx(gray.data as Uint8Array, sat.data as Uint8Array, W, H);
-    const minArea = W * H * 0.06;
+    const ctx = buildScoreCtx(gray.data as Uint8Array, sat.data as Uint8Array, rd, W, H);
+    const minArea = W * H * 0.025;
     const cands: Cand[] = [];
     let fillsFrame = false;
 
@@ -498,13 +508,25 @@ export function detectWithCV(cv: CV, img: { data: Uint8ClampedArray; width: numb
     }
 
     const b = best as { c: Cand; s: number } | null;
+    // Keep scanned forms intact instead of selecting an interior table.
+    if (fillsFrame && isFullPageScan(img)) {
+      return { quad: FULL_QUAD, found: true, score: 0.8, method: 'full-page' };
+    }
     if (!b || b.s < 0.16 || (fillsFrame && b.s < 0.42)) {
       // the sheet fills the whole photo: the full frame IS the page
-      if (fillsFrame) return { quad: FULL_QUAD, found: true, score: 0.5, method: 'full-page' };
+      if (fillsFrame) {
+        // A uniform dark desk is not a full-page scan. In an ambiguous frame
+        // preserve all pixels, without claiming that four edges were found.
+        const lum = ctx.lum;
+        let bright = 0, dark = 0;
+        for (const v of lum) { if (v > 160) bright++; if (v < 100) dark++; }
+        const looksLikeScan = bright > lum.length * 0.65 && dark > lum.length * 0.005;
+        return { quad: FULL_QUAD, found: looksLikeScan, score: looksLikeScan ? 0.5 : 0, method: 'full-page' };
+      }
       return { quad: FULL_QUAD, found: false, score: b ? b.s : 0, method: 'none' };
     }
     const quad = b.c.q.map((p) => ({ x: clamp(p.x / W, -0.02, 1.02), y: clamp(p.y / H, -0.02, 1.02) })) as Quad;
-    return { quad, found: true, score: b.s, method: b.c.method };
+    return { quad: refineDocumentQuad(img, quad), found: true, score: b.s, method: b.c.method };
   } finally {
     for (const m of mats) {
       try { m.delete(); } catch { /* already freed */ }

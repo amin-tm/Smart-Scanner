@@ -23,6 +23,7 @@ import type { Pt, Quad } from './types';
 import { FULL_QUAD, QUAD_OUT } from './types';
 import type { RGBAImage } from './imageproc';
 import { clamp, dist, isConvex, orderQuad, polygonArea, quadAngles } from './imageproc';
+import { isFullPageScan } from './refine';
 
 export interface Detection {
   quad: Quad;
@@ -158,7 +159,7 @@ function houghLines(m: Maps): LineEq[] {
       if (th < 0) th += Math.PI;
       if (th >= Math.PI) th -= Math.PI;
       const tb = Math.round((th * NT) / Math.PI) % NT;
-      const rho = x * cs[tb] + y * sn[tb] + diag;
+      const rho = Math.round(x * cs[tb] + y * sn[tb]) + diag;
       if (rho < 0 || rho >= NR) continue;
       acc[tb * NR + rho] += 1;
       votes++;
@@ -343,7 +344,9 @@ function componentCandidates(img: RGBAImage): Quad[] {
   // Collect lum samples for the percentile fallback
   const sampleLums: number[] = [];
   for (let i = 0; i < sN; i += 3) {
-    const p = i * 4;
+    const px = Math.min(W - 1, Math.floor((i % sw) * sx));
+    const py = Math.min(H - 1, Math.floor(Math.floor(i / sw) * sy));
+    const p = (py * W + px) * 4;
     sampleLums.push(0.299 * d[p] + 0.587 * d[p + 1] + 0.114 * d[p + 2]);
   }
 
@@ -352,7 +355,7 @@ function componentCandidates(img: RGBAImage): Quad[] {
   const labels = new Int32Array(sN);
   const stack = new Int32Array(sN);
 
-  function tryThresholds(thList: number[]) {
+  function tryThresholds(thList: number[], luminanceOnly = false) {
     for (const th of thList) {
       bin.fill(0);
       labels.fill(0);
@@ -364,7 +367,7 @@ function componentCandidates(img: RGBAImage): Quad[] {
           const p = (sRO + srcX) * 4;
           const dc = Math.hypot(d[p] - bgR, d[p + 1] - bgG, d[p + 2] - bgB);
           const lum = 0.299 * d[p] + 0.587 * d[p + 1] + 0.114 * d[p + 2];
-          bin[rO + x] = dc >= th || lum >= Math.max(bgLum + 14, 208) ? 1 : 0;
+          bin[rO + x] = (luminanceOnly ? lum >= th : dc >= th || lum >= Math.max(bgLum + 14, 208)) ? 1 : 0;
         }
       }
       let bestCount = 0, bestLabel = 0, cur = 0;
@@ -401,16 +404,16 @@ function componentCandidates(img: RGBAImage): Quad[] {
   // Pass 1: original proven thresholds
   tryThresholds([14, 24, 36]);
 
-  // Pass 2: if nothing found, try lower thresholds for low-contrast scenes
-  if (out.length === 0) {
-    tryThresholds([10, 18, 28]);
-  }
+  // A textured desk may produce a bad colour component, so also consider
+  // brightness components even when colour candidates already exist.
+  tryThresholds([10, 18, 28]);
 
   // Pass 3: percentile-based fallback — always finds the brightest region
-  if (out.length === 0 && sampleLums.length > 20) {
+  if (sampleLums.length > 20) {
     sampleLums.sort((a, b) => a - b);
     const pTh = sampleLums[Math.floor(sampleLums.length * 0.65)] ?? 180;
-    tryThresholds([pTh]);
+    const bright = sampleLums[Math.floor(sampleLums.length * 0.9)] ?? 230;
+    tryThresholds([pTh, bright * 0.92, bright * 0.82], true);
   }
 
   return out;
@@ -476,7 +479,10 @@ function sideAgreement(m: Maps, a: Pt, b: Pt, cx: number, cy: number): number {
       if (pass === 0 && best > 0) bestO = bestO; // fine pass relative to coarse peak
       if (pass === 1) break;
     }
-    if (best >= tau * 0.5) {
+    // Text inside the page can set a much higher global threshold than the
+    // paper/desk boundary. Sustained inside/outside contrast below rejects
+    // texture, so permit a weaker but continuous physical edge here.
+    if (best >= Math.max(2, tau * 0.2)) {
       hits++;
       if (bestDot > 0) dirOk++;
       sum += Math.min(best, 60);
@@ -494,7 +500,7 @@ function sideAgreement(m: Maps, a: Pt, b: Pt, cx: number, cy: number): number {
     const sorted = [...deltas].sort((x, y) => x - y);
     delta = sorted[sorted.length >> 1];
   }
-  const contrastScore = clamp(Math.abs(delta) / 55, 0, 1);
+  const contrastScore = clamp(Math.abs(delta) / 32, 0, 1);
   const polarity = delta > 6 ? 1 : delta < -6 ? 0.6 : 0.35; // bright paper on darker desk preferred
   const edge = 0.45 * cov + 0.3 * strength + 0.25 * cons;
   return Math.min(1.15, edge * (0.3 + 0.7 * contrastScore) * (0.5 + 0.5 * polarity) * 2.0);
@@ -710,6 +716,7 @@ function refineQuad(q: Quad, m: Maps): Quad {
 export function detectDocument(img: RGBAImage, hi?: RGBAImage | null): Detection {
   const W = img.width, H = img.height;
   if (W < 32 || H < 32) return { quad: FULL_QUAD, found: false, score: 0 };
+  if (isFullPageScan(img)) return { quad: FULL_QUAD, found: true, score: 0.8 };
 
   const m = buildMaps(img);
   const cands: Quad[] = [];
