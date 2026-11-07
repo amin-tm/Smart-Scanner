@@ -184,58 +184,10 @@ export default function Stage({
   const curFilterLabel = FILTERS.find((f) => f.id === page.filter)?.label || 'فیلتر';
 
   return (
-    <div className="a-fade-in relative h-full overflow-hidden rounded-3xl border border-white/10">
-      {crop ? (
-        <CropEditor page={page} onCommit={onQuad} />
-      ) : (
+    <div className="desktop-stage relative h-full overflow-hidden rounded-2xl border border-white/10">
+      <div className="desktop-toolbar">
         <div
-          ref={boxRef}
-          className="checker absolute inset-0 flex items-center justify-center overflow-hidden px-4 pb-4 pt-[4.25rem] sm:px-8 sm:pb-8"
-          style={{ cursor: zoom > 1 ? 'grab' : 'zoom-in' }}
-          onPointerDown={down}
-          onPointerMove={move}
-          onPointerUp={up}
-          onPointerCancel={up}
-          onDoubleClick={() => {
-            setZoom((z) => (z > 1 ? 1 : 2.5));
-            setPan({ x: 0, y: 0 });
-          }}
-        >
-          {d && (
-            <img
-              key={compare ? 'orig' : 'out'}
-              src={compare && page.srcUrl ? page.srcUrl : d.url}
-              alt=""
-              draggable={false}
-              className="a-fade-in paper-shadow max-h-full max-w-full select-none rounded-[3px] bg-white object-contain"
-              style={{
-                transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`,
-                transition: dragRef.current ? 'none' : 'transform .18s ease-out',
-                opacity: d.stale && !compare ? 0.85 : 1,
-              }}
-            />
-          )}
-          {(d?.stale || !d) && (
-            <div className="a-fade-in absolute left-1/2 top-16 -translate-x-1/2 rounded-full bg-black/60 px-3 py-1.5 text-xs text-teal-100 backdrop-blur whitespace-nowrap">
-              <span className="inline-flex items-center gap-2">
-                <Spinner className="h-3.5 w-3.5" /> در حال به‌روزرسانی
-              </span>
-            </div>
-          )}
-          {compare && (
-            <div className="absolute bottom-5 left-1/2 -translate-x-1/2 rounded-full bg-black/70 border border-white/20 px-4 py-1.5 text-xs text-white backdrop-blur whitespace-nowrap">
-              عکس اولیه (بدون فیلتر و پرسپکتیو)
-            </div>
-          )}
-          {!compare && <PrintReadyBadge filter={page.filter} />}
-        </div>
-      )}
-
-      {/* Floating Toolbar — Single row, clean, responsive, never breaks into 2 lines */}
-      <div className="absolute inset-x-0 top-3 z-20 flex justify-center px-2">
-        <div
-          className="glass a-fade-up flex items-center gap-1 rounded-2xl p-1.5 shadow-2xl shadow-black/70 border border-white/15 overflow-x-auto max-w-[98vw] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
-          style={{ background: 'rgba(10, 16, 30, 0.85)' }}
+          className="desktop-tool-group"
         >
           {crop ? (
             <>
@@ -260,6 +212,13 @@ export default function Stage({
             </>
           ) : (
             <>
+              {/* Crop editor toggle */}
+              <Tool
+                icon={<Crop className="h-4 w-4" />}
+                label="برش لبه‌ها"
+                onClick={() => setCrop(true)}
+              />
+
               {/* Filter popup trigger */}
               <Tool
                 icon={<Palette className="h-4 w-4 text-teal-300" />}
@@ -272,24 +231,19 @@ export default function Stage({
 
               <div className="mx-0.5 h-5 w-px bg-white/15 shrink-0" />
 
-              {/* Crop editor toggle */}
-              <Tool
-                icon={<Crop className="h-4 w-4" />}
-                label="برش دستی لبه‌ها"
-                onClick={() => setCrop(true)}
-              />
-
               {/* Rotations */}
               <Tool
                 icon={<RotateCcw className="h-4 w-4" />}
                 label="چرخش چپ"
+                aria-label="چرخش چپ"
                 onClick={() => onRotate(-1)}
-              />
+              ><span className="desktop-tool-text">چرخش چپ</span></Tool>
               <Tool
                 icon={<RotateCw className="h-4 w-4" />}
                 label="چرخش راست"
+                aria-label="چرخش راست"
                 onClick={() => onRotate(1)}
-              />
+              ><span className="desktop-tool-text">چرخش راست</span></Tool>
 
               {/* Compare original */}
               <Tool
@@ -359,9 +313,57 @@ export default function Stage({
         </div>
       </div>
 
+      <div className="desktop-canvas">
+      {crop ? (
+        <CropEditor page={page} onCommit={onQuad} />
+      ) : (
+        <div
+          ref={boxRef}
+          className="checker absolute inset-0 flex items-center justify-center overflow-hidden p-4 sm:p-6"
+          style={{ cursor: zoom > 1 ? 'grab' : 'zoom-in' }}
+          onPointerDown={down}
+          onPointerMove={move}
+          onPointerUp={up}
+          onPointerCancel={up}
+          onDoubleClick={() => {
+            setZoom((z) => (z > 1 ? 1 : 2.5));
+            setPan({ x: 0, y: 0 });
+          }}
+        >
+          {d && (
+            <img
+              key={compare ? 'orig' : 'out'}
+              src={compare && page.srcUrl ? page.srcUrl : d.url}
+              alt=""
+              draggable={false}
+              className="a-fade-in paper-shadow max-h-full max-w-full select-none rounded-[3px] bg-white object-contain"
+              style={{
+                transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`,
+                transition: dragRef.current ? 'none' : 'transform .18s ease-out',
+                opacity: d.stale && !compare ? 0.85 : 1,
+              }}
+            />
+          )}
+          {(d?.stale || !d) && (
+            <div className="a-fade-in absolute left-1/2 top-3 -translate-x-1/2 rounded-full bg-black/60 px-3 py-1.5 text-xs text-teal-100 backdrop-blur whitespace-nowrap">
+              <span className="inline-flex items-center gap-2">
+                <Spinner className="h-3.5 w-3.5" /> در حال به‌روزرسانی
+              </span>
+            </div>
+          )}
+          {compare && (
+            <div className="absolute bottom-5 left-1/2 -translate-x-1/2 rounded-full bg-black/70 border border-white/20 px-4 py-1.5 text-xs text-white backdrop-blur whitespace-nowrap">
+              عکس اولیه (بدون فیلتر و پرسپکتیو)
+            </div>
+          )}
+          {!compare && <PrintReadyBadge filter={page.filter} />}
+        </div>
+      )}
+
+      </div>
       {crop && (
-        <div className="pointer-events-none absolute inset-x-0 bottom-4 z-20 flex justify-center px-4">
-          <div className="a-fade-up rounded-full bg-slate-950/85 border border-white/15 px-4 py-1.5 text-xs text-slate-200 backdrop-blur shadow-xl whitespace-nowrap">
+        <div className="desktop-crop-help">
+          <div className="a-fade-up rounded-full bg-slate-950/85 border border-white/15 px-4 py-1.5 text-xs text-slate-200 backdrop-blur text-center">
             گوشه‌ها را بکشید · دستگیره وسط هر ضلع فقط همان خط را جابه‌جا می‌کند
           </div>
         </div>

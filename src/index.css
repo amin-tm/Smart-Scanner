@@ -920,3 +920,67 @@ header { animation: hero-in 0.6s cubic-bezier(0.16, 1, 0.3, 1) both; }
   ::view-transition-old(root), ::view-transition-new(root) { animation: none; }
   .dropzone-border, [role='button'].border-teal-300::after { animation: none; }
 }
+
+/* Desktop workspace: tools have their own row, so wrapping never covers the page. */
+.desktop-header {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+}
+.desktop-actions { flex-wrap: wrap; justify-content: flex-end; }
+.desktop-stage {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  background: var(--color-ink-2);
+}
+.desktop-toolbar {
+  position: relative;
+  z-index: 2;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--line);
+}
+.desktop-tool-group {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+}
+.desktop-tool-group button { min-height: 36px; }
+.desktop-canvas { position: relative; min-height: 0; overflow: hidden; }
+.desktop-crop-help {
+  display: flex;
+  justify-content: center;
+  padding: 6px 12px;
+  border-top: 1px solid var(--line);
+}
+.desktop-stage .paper-shadow.a-fade-in { animation: workspace-image-in 140ms ease-out both; }
+@keyframes workspace-image-in { from { opacity: .75; } to { opacity: 1; } }
+.desktop-toolbar button,
+.desktop-actions button {
+  transition: background-color 140ms ease, border-color 140ms ease, color 140ms ease, box-shadow 140ms ease;
+}
+.desktop-toolbar button:focus-visible,
+.desktop-actions button:focus-visible {
+  outline: 2px solid var(--color-brand);
+  outline-offset: 2px;
+}
+@media (max-width: 800px) {
+  .desktop-header { grid-template-columns: minmax(0, 1fr) auto; }
+  .desktop-status { grid-column: 1 / -1; grid-row: 2; width: 100%; }
+  .desktop-status:empty { display: none; }
+  .desktop-actions { grid-column: 2; grid-row: 1; }
+  .desktop-tool-group > div[aria-hidden], .desktop-tool-group > div.h-5 { display: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+@media (max-width: 1080px) {
+  .desktop-tool-group .desktop-tool-text,
+  .desktop-tool-group > div.h-5 { display: none; }
+}

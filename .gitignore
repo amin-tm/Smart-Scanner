@@ -4,3 +4,7 @@ src-tauri/target/
 .test-output/
 release/
 
+
+# Locally supplied font binaries
+/src/assets/fonts/iranyekan/*.ttf
+/src/assets/fonts/iranyekan/*.TTF
