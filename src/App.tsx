@@ -29,6 +29,12 @@ export default function App() {
   const fileRef = useRef<HTMLInputElement>(null);
   const pick = useCallback(() => fileRef.current?.click(), []);
 
+  const requestPreview = sc.requestPreview;
+  const filterPageId = sel?.status === 'ready' ? sel.id : undefined;
+  useEffect(() => {
+    if (showFilters && filterPageId) requestPreview(filterPageId, true);
+  }, [showFilters, filterPageId, requestPreview]);
+
   /* Notify desktop shell once UI is ready */
   useEffect(() => {
     requestAnimationFrame(() => requestAnimationFrame(() => void appReady()));
@@ -163,7 +169,7 @@ export default function App() {
   );
 
   return (
-    <div className="relative h-full overflow-hidden flex flex-col">
+    <div className="scanner-studio relative h-full overflow-hidden flex flex-col">
       <div className="aurora">
         <i />
         <i />
@@ -283,9 +289,16 @@ export default function App() {
           {pages.length === 0 ? (
             <EmptyState onPick={pick} dragging={dragging} importing={sc.importing > 0} />
           ) : (
-            <div className="flex min-h-0 h-full gap-3">
+            <div className="studio-workspace">
               {/* Optional left mini rail for instant thumbnail switching */}
-              <div className="hidden md:flex shrink-0 w-[80px] lg:w-[90px] flex-col overflow-hidden">
+              <aside className="studio-sidebar" aria-label="صفحه‌های سند">
+                <div className="studio-sidebar-heading">
+                  <Layers className="h-4 w-4" />
+                  <span>صفحه‌های سند</span>
+                  <button type="button" className="btn btn-icon" aria-label="افزودن فایل" onClick={pick}>
+                    <Plus className="h-4 w-4" />
+                  </button>
+                </div>
                 <Rail
                   pages={pages}
                   selId={sc.selId}
@@ -294,10 +307,16 @@ export default function App() {
                   onMove={sc.movePage}
                   onAdd={pick}
                 />
-              </div>
+              </aside>
 
               {/* Main Document Display Stage (Fills all available room) */}
-              <div className="min-h-0 min-w-0 flex-1 h-full">
+              <section className="studio-editor" aria-label="ویرایش سند">
+                <div className="studio-steps" aria-label="مراحل آماده‌سازی سند">
+                  <button type="button" onClick={pick}><b>۱</b> افزودن فایل</button>
+                  <span aria-current="step"><b>۲</b> ویرایش سند</span>
+                  <button type="button" disabled={!canExport || Boolean(sc.exporting)} onClick={() => void sc.exportPdf()}><b>۳</b> ساخت PDF</button>
+                </div>
+                <div className="studio-stage-slot">
                 {sel && (
                   <Stage
                     key={sel.id}
@@ -314,6 +333,7 @@ export default function App() {
                   />
                 )}
               </div>
+              </section>
             </div>
           )}
         </main>

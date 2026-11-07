@@ -177,7 +177,9 @@ async function process(m: ProcessMsg): Promise<ProcessResult> {
         score = det.score;
       }
     }
-    if (m.makeProxy && (workBmp || full)) {
+    if (m.makeProxy && Math.max(width, height) <= 1800) {
+      proxy = m.blob;
+    } else if (m.makeProxy && (workBmp || full)) {
       const base = workBmp ?? full!;
       const p = fitSize(W, H, 1800);
       const { oc } = drawScaled(base, p.w, p.h, false);

@@ -71,12 +71,13 @@ export function useScanner() {
   }, []);
 
   /* ------------------------------------------------------------ preview (fast, interactive) */
-  const runners = useRef(new Map<string, { running: boolean; next: boolean }>());
+  const runners = useRef(new Map<string, { running: boolean; next: boolean; thumbnails: boolean }>());
   const requestPreview = useCallback(
-    (id: string) => {
+    (id: string, thumbnails = false) => {
       let r = runners.current.get(id);
-      if (!r) runners.current.set(id, (r = { running: false, next: false }));
+      if (!r) runners.current.set(id, (r = { running: false, next: false, thumbnails: false }));
       r.next = true;
+      r.thumbnails ||= thumbnails;
       if (r.running) return;
       r.running = true;
       (async () => {
@@ -86,7 +87,8 @@ export function useScanner() {
           const p = find(id);
           if (!p || !p.proxy || p.status !== 'ready') break;
           const key = thumbKeyOf(p);
-          const needThumbs = p.thumbKey !== key || !p.thumbsAll;
+          const needThumbs = st.thumbnails && (p.thumbKey !== key || !p.thumbsAll);
+          st.thumbnails = false;
           const rev = p.rev;
           try {
             const res = await previewPool.run(
@@ -230,12 +232,11 @@ export function useScanner() {
           thumbKey: thumbKeyOf({ ...cur, quad: res.quad }),
         });
         if (!selRef.current) setSel(id);
-        if (selRef.current === id) requestPreview(id);
       } catch (e) {
         patch(id, { status: 'error', error: e instanceof Error ? e.message : 'خطا در پردازش' });
       }
     },
-    [patch, setSel, requestPreview],
+    [patch, setSel],
   );
 
   const addFiles = useCallback(
@@ -312,7 +313,7 @@ export function useScanner() {
       setSel(id);
       const p = find(id);
       const d = p ? displayOf(p) : null;
-      if (p && p.status === 'ready' && (!d || d.stale || !p.thumbsAll)) requestPreview(id);
+      if (p && p.status === 'ready' && (!d || d.stale)) requestPreview(id);
     },
     [requestPreview, setSel],
   );

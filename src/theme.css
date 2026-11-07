@@ -41,21 +41,11 @@ textarea {
     box-shadow var(--theme-speed) var(--theme-ease);
 }
 
-/* Circular reveal animation */
-
-:root.theme-revealing::view-transition-old(root),
-:root.theme-revealing::view-transition-new(root) {
-  animation: none;
-  mix-blend-mode: normal;
-}
-
-:root.theme-revealing::view-transition-new(root) {
-  z-index: 2;
-}
-
-:root.theme-revealing::view-transition-old(root) {
-  z-index: 1;
-}
+/* Short dissolve between themes, without moving or masking the workspace. */
+::view-transition-old(root) { animation: theme-fade-out 160ms ease both; }
+::view-transition-new(root) { animation: theme-fade-in 160ms ease both; }
+@keyframes theme-fade-out { to { opacity: 0; } }
+@keyframes theme-fade-in { from { opacity: 0; } }
 
 /* Theme toggle button */
 

@@ -984,3 +984,79 @@ header { animation: hero-in 0.6s cubic-bezier(0.16, 1, 0.3, 1) both; }
   .desktop-tool-group .desktop-tool-text,
   .desktop-tool-group > div.h-5 { display: none; }
 }
+
+.scanner-studio .aurora, .scanner-studio .grain { display: none; }
+.scanner-studio .app-header { box-shadow: none; }
+.studio-workspace {
+  display: grid;
+  grid-template-columns: minmax(132px, 17%) minmax(0, 1fr);
+  gap: 12px;
+  min-height: 0;
+  height: 100%;
+}
+.studio-sidebar {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  min-height: 0;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: var(--glass);
+}
+.studio-sidebar-heading {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px;
+  border-bottom: 1px solid var(--line);
+  font-size: .75rem;
+  font-weight: 700;
+}
+.studio-sidebar-heading button { margin-inline-start: auto; }
+.studio-editor { display: grid; grid-template-rows: auto minmax(0, 1fr); gap: 8px; min-width: 0; }
+.studio-stage-slot { min-height: 0; }
+.studio-steps { display: flex; flex-wrap: wrap; gap: 6px; }
+.studio-steps > * {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  font-size: .75rem;
+  transition: background-color 150ms ease, border-color 150ms ease;
+}
+.studio-steps b { font-weight: 800; }
+.studio-steps [aria-current='step'] {
+  background: color-mix(in srgb, var(--color-brand) 15%, transparent);
+  border-color: color-mix(in srgb, var(--color-brand) 50%, transparent);
+}
+.studio-steps button:hover:not(:disabled) { background: var(--glass-2); }
+.studio-steps button:disabled { opacity: .5; }
+@media (max-width: 760px) {
+  .studio-workspace { grid-template-columns: minmax(0, 1fr); }
+  .studio-sidebar { display: none; }
+}
+
+/* Equal desktop control height across text and icon actions. */
+.desktop-actions button,
+.desktop-tool-group button,
+.studio-steps > *,
+.studio-sidebar-heading button {
+  box-sizing: border-box;
+  height: 36px;
+  min-height: 36px;
+}
+:root[data-theme="light"] .studio-steps,
+:root[data-theme="light"] .studio-sidebar,
+:root[data-theme="light"] .desktop-toolbar { color: #182a40; }
+:root[data-theme="light"] :is(.text-teal-100,.text-teal-200,.text-cyan-100,.text-cyan-200) {
+  color: #13565e;
+}
+:root[data-theme="light"] :is(.bg-black\/60,.bg-black\/70) {
+  background-color: #eaf1fa;
+  color: #182a40;
+}
+:root[data-theme="light"] :is(.bg-black\/60,.bg-black\/70) :is(span, svg) {
+  color: inherit;
+}
