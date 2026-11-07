@@ -1,4 +1,5 @@
 import { detectDocument } from '../lib/detect';
+import { refineDocumentQuad } from '../lib/refine';
 import { detectWithCV } from '../lib/cvDetect';
 import { loadCV } from '../lib/cvLoader';
 import {
@@ -146,7 +147,17 @@ async function process(m: ProcessMsg): Promise<ProcessResult> {
       // 1) OpenCV multi-strategy detector (edges + paper region + GrabCut)
       try {
         const { cv } = await loadCV();
-        const det = detectWithCV(cv, hi);
+        let det = detectWithCV(cv, hi);
+        if (!det.found) {
+          // A smaller search suppresses fine desk texture and joins broken edges.
+          const retry = fitSize(W, H, 480);
+          if (Math.max(hi.width, hi.height) > 480) {
+            const candidate = detectWithCV(cv, bitmapToImage(base, retry.w, retry.h));
+            if (candidate.found && candidate.method !== 'full-page') {
+              det = { ...candidate, quad: refineDocumentQuad(hi, candidate.quad) };
+            }
+          }
+        }
         if (det.found) {
           quad = det.quad;
           found = true;

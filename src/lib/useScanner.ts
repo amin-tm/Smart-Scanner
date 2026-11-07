@@ -430,13 +430,16 @@ export function useScanner() {
           setExporting({ done: ++done, total: list.length });
         }),
       );
-      const imgs = [];
-      for (const p0 of list) {
-        const p = find(p0.id);
-        if (!p?.out) continue;
-        imgs.push({ jpeg: new Uint8Array(await p.out.blob.arrayBuffer()), width: p.out.width, height: p.out.height });
-      }
-      if (!imgs.length) throw new Error('هیچ صفحه‌ای برای ساخت PDF آماده نیست');
+      const outputs = list.map(({ id }) => {
+        const page = find(id);
+        if (!page?.out || page.out.rev !== page.rev) {
+          throw new Error('آماده‌سازی همهٔ صفحه‌ها کامل نشد. دوباره خروجی بگیرید.');
+        }
+        return page.out;
+      });
+      const imgs = await Promise.all(outputs.map(async ({ blob, width, height }) => ({
+        jpeg: new Uint8Array(await blob.arrayBuffer()), width, height,
+      })));
       const s = settingsRef.current;
       const pdf = buildPdf(imgs, s.pageSize);
       const name = `${s.filePrefix.trim() || 'Scan'}_${timestamp()}.pdf`;

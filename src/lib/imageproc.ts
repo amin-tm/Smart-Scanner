@@ -983,38 +983,31 @@ function applyNormalizedTone(img: RGBAImage, bg: Background, filter: FilterId, a
     const rowI = y * W;
     for (let x = 0; x < W; x++, p += 4) {
       const dl = det ? det[rowI + x] : 0;
-      let ir = ((d[p] / S.R[x] + dl) * ls) | 0;
-      let ig = ((d[p + 1] / S.G[x] + dl) * ls) | 0;
-      let ib = ((d[p + 2] / S.B[x] + dl) * ls) | 0;
-      if (ir > LUT_N) ir = LUT_N;
-      else if (ir < 0) ir = 0;
-      if (ig > LUT_N) ig = LUT_N;
-      else if (ig < 0) ig = 0;
-      if (ib > LUT_N) ib = LUT_N;
-      else if (ib < 0) ib = 0;
-      let vr = lut[ir];
-      let vg = lut[ig];
-      let vb = lut[ib];
-      const L = 0.299 * vr + 0.587 * vg + 0.114 * vb;
-      if (sat === 0) {
-        vr = vg = vb = L;
-      } else {
-        // boost colours in mid-tones only: neutral blacks (no colour blotches) and clean paper
-        let k = L < 0.06 ? 0 : L > 0.35 ? 1 : (L - 0.06) / 0.29;
-        if (L > 0.88) k *= L >= 0.99 ? 0 : 1 - (L - 0.88) / 0.11;
-        let f = 1 + (sat - 1) * k;
-        if (L < 0.14) f *= 0.4 + (0.6 * L) / 0.14;
-        vr = L + (vr - L) * f;
-        vg = L + (vg - L) * f;
-        vb = L + (vb - L) * f;
-      }
-      if (L > wc0) {
-        let t = L >= wc1 ? 1 : (L - wc0) * wcr;
-        t = t * t * (3 - 2 * t);
-        vr += (1 - vr) * t;
-        vg += (1 - vg) * t;
-        vb += (1 - vb) * t;
-      }
+      const paper = 0.299 * S.R[x] + 0.587 * S.G[x] + 0.114 * S.B[x];
+      const r = d[p] / paper;
+      const g = d[p + 1] / paper;
+      const b = d[p + 2] / paper;
+      const luminance = 0.299 * r + 0.587 * g + 0.114 * b;
+      const chroma = Math.max(r, g, b) - Math.min(r, g, b);
+      // Whiten neutral paper; keep the tone curve from erasing pale ink.
+      const balancedR = d[p] / S.R[x];
+      const balancedG = d[p + 1] / S.G[x];
+      const balancedB = d[p + 2] / S.B[x];
+      const balancedChroma = Math.max(balancedR, balancedG, balancedB) - Math.min(balancedR, balancedG, balancedB);
+      const neutral = clamp(1 - (Math.min(chroma, balancedChroma) - 0.04) / 0.14, 0, 1);
+      const index = clamp(Math.round((luminance + dl) * ls), 0, LUT_N);
+      let tone = lut[index];
+      if (sat !== 0) tone = Math.min(tone, 1 - 0.22 * (1 - neutral));
+      const whitening = clamp((tone - wc0) * wcr, 0, 1) * (sat === 0 ? 1 : neutral);
+      tone += (1 - tone) * whitening;
+      let gain = sat === 0 ? 0 : 1 + (sat - 1) * 0.25;
+      const high = Math.max(r, g, b) - luminance;
+      const low = luminance - Math.min(r, g, b);
+      if (high > 0) gain = Math.min(gain, (1 - tone) / high);
+      if (low > 0) gain = Math.min(gain, tone / low);
+      const vr = tone + (r - luminance) * gain;
+      const vg = tone + (g - luminance) * gain;
+      const vb = tone + (b - luminance) * gain;
       d[p] = vr * 255;
       d[p + 1] = vg * 255;
       d[p + 2] = vb * 255;

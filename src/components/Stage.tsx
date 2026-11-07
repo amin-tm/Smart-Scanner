@@ -26,7 +26,7 @@ function PrintReadyBadge({ filter }: { filter: FilterId }) {
   const white = filter === 'magic' || filter === 'gray' || filter === 'bw';
   const label =
     filter === 'magic'
-      ? 'رنگ جادویی · ۱۰۰٪ سفید چاپی'
+      ? 'رنگ جادویی · مناسب چاپ'
       : filter === 'gray' || filter === 'bw'
       ? 'سفید چاپی'
       : filter === 'noshadow'
