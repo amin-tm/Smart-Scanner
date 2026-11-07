@@ -1,5 +1,5 @@
 import { detectDocument } from '../lib/detect';
-import { excludesPrintedContent, isFullPageScan, refineDocumentQuad } from '../lib/refine';
+import { cutsThroughPaper, excludesPrintedContent, isFullPageScan, refineDocumentQuad } from '../lib/refine';
 import { detectWithCV } from '../lib/cvDetect';
 import { loadCV } from '../lib/cvLoader';
 import {
@@ -178,7 +178,7 @@ async function process(m: ProcessMsg): Promise<ProcessResult> {
         found = det.found;
         score = det.score;
       }
-      if (found && excludesPrintedContent(hi, quad)) {
+      if (found && (excludesPrintedContent(hi, quad) || cutsThroughPaper(hi, quad))) {
         quad = FULL_QUAD;
         found = false;
         score = 0;

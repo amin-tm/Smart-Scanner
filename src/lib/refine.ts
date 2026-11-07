@@ -220,3 +220,42 @@ export function excludesPrintedContent(image: RGBAImage, quad: Quad): boolean {
     }
     return false;
 }
+/** Verify sides that remove substantial margins. Thin rules can produce a
+ * strong gradient but do not separate two surfaces across the side. */
+export function cutsThroughPaper(image: RGBAImage, quad: Quad): boolean {
+    const { width, height, data } = image;
+    const margin = Math.max(width, height) * .075;
+    const probe = Math.max(4, Math.round(Math.min(width, height) * .012));
+    const channel = (x: number, y: number, c: number) =>
+        data[(Math.round(y) * width + Math.round(x)) * 4 + c];
+    for (let side = 0; side < 4; side++) {
+        const a = quad[side], b = quad[(side + 1) % 4];
+        const ax = a.x * (width - 1), ay = a.y * (height - 1);
+        const dx = (b.x - a.x) * (width - 1), dy = (b.y - a.y) * (height - 1);
+        const len = Math.hypot(dx, dy);
+        if (len < 1) continue;
+        const nx = dy / len, ny = -dx / len;
+        let samples = 0, supported = 0;
+        for (let i = 0; i < 24; i++) {
+            const t = .12 + .76 * (i + .5) / 24;
+            const x = ax + t * dx, y = ay + t * dy;
+            const inside = (d: number) => x + nx * d >= 0 && x + nx * d < width - 1 &&
+                y + ny * d >= 0 && y + ny * d < height - 1;
+            if (!inside(margin) || !inside(-2 * probe)) continue;
+            samples++;
+            let near = 0, far = 0, agreement = 0;
+            for (let c = 0; c < 3; c++) {
+                const delta = channel(x + nx * probe, y + ny * probe, c) -
+                    channel(x - nx * probe, y - ny * probe, c);
+                const wide = channel(x + nx * 2 * probe, y + ny * 2 * probe, c) -
+                    channel(x - nx * 2 * probe, y - ny * 2 * probe, c);
+                near += delta * delta;
+                far += wide * wide;
+                agreement += delta * wide;
+            }
+            if (near >= 3 * 9 ** 2 && far >= 3 * 9 ** 2 && agreement > 0) supported++;
+        }
+        if (samples >= 18 && supported < samples * .5) return true;
+    }
+    return false;
+}
