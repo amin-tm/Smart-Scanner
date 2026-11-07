@@ -18,7 +18,7 @@ import {
 let uid = 0;
 const newId = () => `p${Date.now().toString(36)}${(uid++).toString(36)}`;
 
-const PREVIEW_MAX = 1300;
+const PREVIEW_MAX = 1000;
 const srcMaxFor = (maxOut: number) => Math.min(4200, Math.round(maxOut * 1.25));
 const thumbKeyOf = (p: Page) => `${p.quad.map((q) => `${q.x.toFixed(4)},${q.y.toFixed(4)}`).join(';')}|${p.rotation}`;
 
@@ -136,7 +136,6 @@ export function useScanner() {
 
   /* ------------------------------------------------------------ final (export quality, background) */
   const finals = useRef(new Map<string, { rev: number; promise: Promise<void> }>());
-  const timers = useRef(new Map<string, number>());
 
   const ensureFinal = useCallback(
     (id: string, priority: number): Promise<void> => {
@@ -184,21 +183,6 @@ export function useScanner() {
     [patch],
   );
 
-  const scheduleFinal = useCallback(
-    (id: string, delay = 700) => {
-      const t = timers.current.get(id);
-      if (t) clearTimeout(t);
-      timers.current.set(
-        id,
-        window.setTimeout(() => {
-          timers.current.delete(id);
-          void ensureFinal(id, 0);
-        }, delay),
-      );
-    },
-    [ensureFinal],
-  );
-
   /* ------------------------------------------------------------ import */
   const importPage = useCallback(
     async (id: string) => {
@@ -207,9 +191,7 @@ export function useScanner() {
       patch(id, { status: 'working' });
       const s = settingsRef.current;
       try {
-        // Upload stage: detect the page + build the working copy + a fast image.
-        // The print-quality render is queued right after, in the background,
-        // so 20 photos appear on screen immediately instead of one by one.
+        // Import produces an editable preview. PDF export renders at print resolution.
         const res = await batchPool.run({
           type: 'process',
           id,
@@ -221,7 +203,7 @@ export function useScanner() {
           adjust: p0.adjust,
           cleanEdges: s.cleanEdges,
           srcMax: 2400,
-          maxOut: 1400,
+          maxOut: PREVIEW_MAX,
           jpeg: 0.82,
           bicubic: false,
           cache: false,
@@ -249,12 +231,11 @@ export function useScanner() {
         });
         if (!selRef.current) setSel(id);
         if (selRef.current === id) requestPreview(id);
-        scheduleFinal(id, 450);
       } catch (e) {
         patch(id, { status: 'error', error: e instanceof Error ? e.message : 'خطا در پردازش' });
       }
     },
-    [patch, setSel, requestPreview, scheduleFinal],
+    [patch, setSel, requestPreview],
   );
 
   const addFiles = useCallback(
@@ -322,9 +303,8 @@ export function useScanner() {
     (id: string, ch: Partial<Pick<Page, 'quad' | 'rotation' | 'filter' | 'adjust'>>, withPreview = true) => {
       patch(id, (p) => ({ ...ch, rev: p.rev + 1 }));
       if (withPreview) requestPreview(id);
-      scheduleFinal(id);
     },
-    [patch, requestPreview, scheduleFinal],
+    [patch, requestPreview],
   );
 
   const select = useCallback(
@@ -342,9 +322,6 @@ export function useScanner() {
     if (p.out) URL.revokeObjectURL(p.out.url);
     if (p.prev) URL.revokeObjectURL(p.prev.url);
     if (p.thumbs) Object.values(p.thumbs).forEach((u) => u && URL.revokeObjectURL(u));
-    const t = timers.current.get(p.id);
-    if (t) clearTimeout(t);
-    timers.current.delete(p.id);
     runners.current.delete(p.id);
   };
 
@@ -403,11 +380,10 @@ export function useScanner() {
       saveSettings(next);
       if (next.quality !== prev.quality || next.cleanEdges !== prev.cleanEdges) {
         setPages((ps) => ps.map((p) => (p.status === 'ready' ? { ...p, rev: p.rev + 1 } : p)));
-        pagesRef.current.forEach((p) => p.status === 'ready' && scheduleFinal(p.id, 900));
         if (selRef.current) requestPreview(selRef.current);
       }
     },
-    [requestPreview, scheduleFinal, setPages],
+    [requestPreview, setPages],
   );
 
   /* ------------------------------------------------------------ export */
@@ -471,7 +447,6 @@ export function useScanner() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const finalPending = pages.filter((p) => p.status === 'ready' && !(p.out && p.out.rev === p.rev)).length;
 
   return {
     pages,
@@ -483,7 +458,6 @@ export function useScanner() {
     result,
     error,
     busyCount,
-    finalPending,
     addFiles,
     select,
     edit,

@@ -224,12 +224,6 @@ export default function App() {
                 </div>
               </div>
             )}
-            {!busy && sc.finalPending > 0 && (
-              <div className="a-fade-in mx-auto flex w-fit items-center gap-1.5 rounded-full bg-teal-400/10 border border-teal-300/20 px-3 py-1 text-[0.68rem] text-teal-200 whitespace-nowrap">
-                <Spinner className="h-3 w-3" />
-                <span>نهایی‌سازی کیفیت چاپ در پس‌زمینه…</span>
-              </div>
-            )}
           </div>
 
           {/* Right Action Buttons - strictly single line */}
