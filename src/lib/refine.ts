@@ -186,3 +186,37 @@ export function recoverFrameSpanningPage(image: RGBAImage, quad: Quad): Quad {
     return [{ x: 0, y: 0 }, { x: 1, y: 0 },
         { x: 1, y: bottomAt(1) }, { x: 0, y: bottomAt(0) }];
 }
+/** A narrow result can be a table row. Look for printed strokes well beyond
+ * its long edges before discarding the rest of the image. */
+export function excludesPrintedContent(image: RGBAImage, quad: Quad): boolean {
+    const { width, height, data } = image;
+    if (polygonArea(quad) > .35) return false;
+    const xs = quad.map(p => p.x), ys = quad.map(p => p.y);
+    const left = Math.min(...xs), right = Math.max(...xs);
+    const top = Math.min(...ys), bottom = Math.max(...ys);
+    const luminance = (x: number, y: number) => {
+        const i = (y * width + x) * 4;
+        return .299 * data[i] + .587 * data[i + 1] + .114 * data[i + 2];
+    };
+    const probe = Math.max(2, Math.round(Math.min(width, height) / 200));
+    let textTiles = 0;
+    for (let row = 1; row < 7; row++) {
+        for (let col = 1; col < 7; col++) {
+            const x0 = col / 8, x1 = (col + 1) / 8;
+            const y0 = row / 8, y1 = (row + 1) / 8;
+            if (!(x1 < left - .02 || x0 > right + .02 || y1 < top - .02 || y0 > bottom + .02)) continue;
+            let strokes = 0, light = 0, samples = 0;
+            for (let y = Math.ceil(y0 * height); y < y1 * height; y += 2) {
+                for (let x = Math.ceil(x0 * width); x < x1 * width; x += 2) {
+                    const center = luminance(x, y);
+                    const above = luminance(x, y - probe), below = luminance(x, y + probe);
+                    samples++;
+                    if (center > 140) light++;
+                    if (Math.min(above, below) > Math.max(130, center + 35)) strokes++;
+                }
+            }
+            if (light > samples * .55 && strokes > samples * .008 && ++textTiles >= 5) return true;
+        }
+    }
+    return false;
+}

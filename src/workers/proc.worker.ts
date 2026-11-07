@@ -1,5 +1,5 @@
 import { detectDocument } from '../lib/detect';
-import { isFullPageScan, refineDocumentQuad } from '../lib/refine';
+import { excludesPrintedContent, isFullPageScan, refineDocumentQuad } from '../lib/refine';
 import { detectWithCV } from '../lib/cvDetect';
 import { loadCV } from '../lib/cvLoader';
 import {
@@ -177,6 +177,11 @@ async function process(m: ProcessMsg): Promise<ProcessResult> {
         quad = det.quad;
         found = det.found;
         score = det.score;
+      }
+      if (found && excludesPrintedContent(hi, quad)) {
+        quad = FULL_QUAD;
+        found = false;
+        score = 0;
       }
     }
     if (m.makeProxy && Math.max(width, height) <= 1800) {

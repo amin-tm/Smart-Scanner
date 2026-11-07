@@ -4,6 +4,7 @@ import jpeg from 'jpeg-js';
 import { detectWithCV } from '../../src/lib/cvDetect';
 import { detectDocument } from '../../src/lib/detect';
 import { fixtures } from './fixtures';
+import { excludesPrintedContent } from '../../src/lib/refine';
 import type { Quad } from '../../src/lib/types';
 const require = createRequire(import.meta.url);
 const cv = await require('@techstark/opencv-js');
@@ -24,6 +25,11 @@ if (process.argv.includes('--real')) {
         small.delete();
     }
 }
+const printedForm = cases.find(f => f.name === 'full-page-printed-frame');
+const tableRow: Quad = [{ x: .1, y: .79 }, { x: .9, y: .78 }, { x: .9, y: .87 }, { x: .1, y: .88 }];
+if (printedForm && !excludesPrintedContent(printedForm.image, tableRow)) {
+    throw new Error('A table row must not replace the full form');
+}
 for (const f of cases) {
     const start = performance.now();
     // Match the worker: the fallback searches a <=640px copy and refines
@@ -41,6 +47,9 @@ for (const f of cases) {
         result = detectWithCV(cv, f.image);
     // Cyclic point matching permits landscape/diamond documents without hiding
     // any misplaced corner. Error is measured against the image diagonal.
+    if (result.found && excludesPrintedContent(f.image, result.quad)) {
+        result = { ...result, found: false };
+    }
     const { width: W, height: H } = f.image;
     const error = Math.min(...[0, 1, 2, 3].map(offset => Math.max(...f.quad.map((p, i) => Math.hypot((p.x - result.quad[(i + offset) % 4].x) * W, (p.y - result.quad[(i + offset) % 4].y) * H) / Math.hypot(W, H))))) * 100;
     const pass = f.document ? result.found && error < 2 : !result.found;
