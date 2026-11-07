@@ -153,3 +153,36 @@ export function refineDocumentQuad(image: RGBAImage, quad: Quad): Quad {
         return quad;
     return refined.map(p => ({ x: clamp(p.x / W, 0, 1), y: clamp(p.y / H, 0, 1) })) as Quad;
 }
+
+/** Recover the visible crop when a sheet runs beyond three frame edges.
+ * Require the detected bottom edge to continue past the interior right corner. */
+export function recoverFrameSpanningPage(image: RGBAImage, quad: Quad): Quad {
+    const { width, height, data } = image;
+    const [tl, tr, br, bl] = quad;
+    if (Math.max(tl.x, bl.x) > .025 || tr.x < .85 || br.x < .55 || br.x > .92 ||
+        Math.max(tl.y, tr.y) > .2 || Math.min(tl.y, tr.y) < .025 ||
+        Math.min(bl.y, br.y) < .7 || Math.abs(bl.y - br.y) > .08) return quad;
+
+    const slope = (br.y - bl.y) / (br.x - bl.x);
+    const bottomAt = (x: number) => bl.y + slope * (x - bl.x);
+    const probe = Math.max(3, Math.round(height * .005));
+    const luminance = (x: number, y: number) => {
+        const i = (y * width + x) * 4;
+        return .299 * data[i] + .587 * data[i + 1] + .114 * data[i + 2];
+    };
+    // Check both the existing edge and its continuation, including near the
+    // right frame. A printed horizontal line normally has paper on both sides.
+    let supported = 0;
+    for (let i = 0; i < 24; i++) {
+        const x = .08 + .9 * i / 23;
+        const px = Math.round(x * (width - 1));
+        const py = Math.round(bottomAt(x) * height);
+        if (py < 2 * probe || py >= height - 2 * probe) return quad;
+        const step = luminance(px, py - probe) - luminance(px, py + probe);
+        const wide = luminance(px, py - 2 * probe) - luminance(px, py + 2 * probe);
+        if (step >= 8 && wide >= 8) supported++;
+    }
+    if (supported < 19) return quad;
+    return [{ x: 0, y: 0 }, { x: 1, y: 0 },
+        { x: 1, y: bottomAt(1) }, { x: 0, y: bottomAt(0) }];
+}
