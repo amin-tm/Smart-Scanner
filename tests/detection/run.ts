@@ -34,6 +34,10 @@ const printedBorder: Quad = [{ x: .09, y: .08 }, { x: .91, y: .08 }, { x: .91, y
 if (printedForm && !cutsThroughPaper(printedForm.image, printedBorder)) {
     throw new Error('A printed border must not replace the full form');
 }
+const clippedDiagonal: Quad = [{ x: .07, y: 0 }, { x: .94, y: 0 }, { x: 1, y: 1 }, { x: 0, y: .82 }];
+if (printedForm && !cutsThroughPaper(printedForm.image, clippedDiagonal)) {
+    throw new Error('A corner touching the frame must not hide an unsupported diagonal crop');
+}
 for (const f of cases) {
     const start = performance.now();
     // Match the worker: the fallback searches a <=640px copy and refines

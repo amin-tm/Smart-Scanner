@@ -255,7 +255,9 @@ export function cutsThroughPaper(image: RGBAImage, quad: Quad): boolean {
             }
             if (near >= 3 * 9 ** 2 && far >= 3 * 9 ** 2 && agreement > 0) supported++;
         }
-        if (samples >= 18 && supported < samples * .5) return true;
+        // An endpoint at the frame leaves fewer usable samples on this side.
+        const touchesFrame = [a, b].some(p => p.x <= .02 || p.x >= .98 || p.y <= .02 || p.y >= .98);
+        if (samples >= (touchesFrame ? 8 : 18) && supported < samples * .5) return true;
     }
     return false;
 }
