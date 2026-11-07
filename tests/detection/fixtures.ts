@@ -70,6 +70,7 @@ export function fixtures(): Fixture[] {
         fixture('landscape', [{ x: .09, y: .24 }, { x: .87, y: .12 }, { x: .92, y: .77 }, { x: .15, y: .87 }]),
         fixture('frame-edge-page', [{ x: 0, y: .13 }, { x: .8, y: .08 }, { x: .88, y: .94 }, { x: 0, y: .88 }]),
         fixture('full-page', [{ x: 0, y: 0 }, { x: 1, y: 0 }, { x: 1, y: 1 }, { x: 0, y: 1 }]),
+        fixture('full-page-printed-frame', [{ x: 0, y: 0 }, { x: 1, y: 0 }, { x: 1, y: 1 }, { x: 0, y: 1 }], { frame: true }),
         fixture('no-document', straight, { blank: true }),
     ];
     // Fixed hold-out variations: perspective, page colour, exposure, background

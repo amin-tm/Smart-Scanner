@@ -1,5 +1,5 @@
 import { detectDocument } from '../lib/detect';
-import { refineDocumentQuad } from '../lib/refine';
+import { isFullPageScan, refineDocumentQuad } from '../lib/refine';
 import { detectWithCV } from '../lib/cvDetect';
 import { loadCV } from '../lib/cvLoader';
 import {
@@ -12,7 +12,7 @@ import {
   type Background,
   type RGBAImage,
 } from '../lib/imageproc';
-import { DEFAULT_ADJUST } from '../lib/types';
+import { DEFAULT_ADJUST, FULL_QUAD } from '../lib/types';
 import type { FilterId, ProcessMsg, ProcessResult, Quad } from '../lib/types';
 
 const scope = self as unknown as {
@@ -139,7 +139,9 @@ async function process(m: ProcessMsg): Promise<ProcessResult> {
   let proxy: Blob | null = null;
 
   try {
-    if (m.detect) {
+    if (m.detect && isFullPageScan(src)) {
+      quad = FULL_QUAD;
+    } else if (m.detect) {
       const base = workBmp ?? full!;
       const hs = fitSize(W, H, 1600);
       const hi = bitmapToImage(base, hs.w, hs.h);

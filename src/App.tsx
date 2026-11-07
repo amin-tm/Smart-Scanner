@@ -120,9 +120,9 @@ export default function App() {
       if (mod && e.key.toLowerCase() === 'o') {
         e.preventDefault();
         pick();
-      } else if ((mod && e.key.toLowerCase() === 's') || (e.key === 'Enter' && !crop)) {
-        if (canExport) {
-          e.preventDefault();
+      } else if ((mod && (e.code === 'KeyS' || e.key.toLowerCase() === 's')) || (e.key === 'Enter' && !crop)) {
+        e.preventDefault();
+        if (canExport && !e.repeat) {
           void sc.exportPdf();
         }
       } else if (!mod && sel) {
@@ -349,7 +349,7 @@ export default function App() {
           onFilter={(f: FilterId) => sc.edit(sel.id, { filter: f })}
           onAdjust={(a: Partial<Adjust>) => sc.edit(sel.id, { adjust: { ...sel.adjust, ...a } })}
           onResetAdjust={() => sc.edit(sel.id, { adjust: { ...DEFAULT_ADJUST } })}
-          onApplyAll={() => sc.applyFilterToAll(sel.filter)}
+          onApplyAll={() => sc.applyFilterToAll(sel)}
         />
       )}</Presence>
 

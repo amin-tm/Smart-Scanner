@@ -311,6 +311,9 @@ function scoreQuad(c: ScoreCtx, q: Quad): number {
 /* ---------------------------------------------------------------- main */
 
 export function detectWithCV(cv: CV, img: { data: Uint8ClampedArray; width: number; height: number }): CvDetection {
+  if (isFullPageScan(img)) {
+    return { quad: FULL_QUAD, found: true, score: 0.8, method: 'full-page' };
+  }
   const mats: any[] = [];
   const keep = <T>(m: T): T => { mats.push(m); return m; };
   try {
@@ -508,10 +511,6 @@ export function detectWithCV(cv: CV, img: { data: Uint8ClampedArray; width: numb
     }
 
     const b = best as { c: Cand; s: number } | null;
-    // Keep scanned forms intact instead of selecting an interior table.
-    if (fillsFrame && isFullPageScan(img)) {
-      return { quad: FULL_QUAD, found: true, score: 0.8, method: 'full-page' };
-    }
     if (!b || b.s < 0.16 || (fillsFrame && b.s < 0.42)) {
       // the sheet fills the whole photo: the full frame IS the page
       if (fillsFrame) {

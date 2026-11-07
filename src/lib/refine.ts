@@ -28,7 +28,7 @@ export function isFullPageScan(image: RGBAImage): boolean {
     }
     for (let i = 0; i < white * .75; i++)
         dark += hist[i];
-    if (white <= 175 || dark < count * .02)
+    if (white <= 175 || dark < count * .002)
         return false;
     let samePaper = 0, border = 0;
     const probe = (x: number, y: number) => {

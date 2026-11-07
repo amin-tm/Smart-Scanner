@@ -200,7 +200,7 @@ export default function FilterModal({
               className="btn btn-ghost !px-3 !py-2 text-xs text-slate-300 hover:text-white whitespace-nowrap"
             >
               <Layers className="h-3.5 w-3.5 text-teal-300" />
-              <span>اعمال روی همه صفحات</span>
+              <span>اعمال فیلتر و تنظیمات به همهٔ صفحات</span>
             </button>
           ) : <div />}
           <button

@@ -363,10 +363,10 @@ export function useScanner() {
   );
 
   const applyFilterToAll = useCallback(
-    (filter: FilterId) => {
+    (source: Pick<Page, 'id' | 'filter' | 'adjust'>) => {
       for (const p of pagesRef.current) {
-        if (p.status !== 'ready' || p.filter === filter) continue;
-        edit(p.id, { filter }, p.id === selRef.current);
+        if (p.status !== 'ready' || p.id === source.id) continue;
+        edit(p.id, { filter: source.filter, adjust: { ...source.adjust } }, p.id === selRef.current);
       }
     },
     [edit],
