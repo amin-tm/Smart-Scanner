@@ -15,7 +15,7 @@
 import type { Pt, Quad } from './types';
 import { FULL_QUAD } from './types';
 import { clamp, dist, isConvex, orderQuad, polygonArea, quadAngles } from './imageproc';
-import { isFullPageScan, recoverFrameSpanningPage, refineDocumentQuad } from './refine';
+import { isFullPageScan, recoverFrameSpanningPage, recoverVisibleLeftEdge, refineDocumentQuad } from './refine';
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 type CV = any;
@@ -525,7 +525,7 @@ export function detectWithCV(cv: CV, img: { data: Uint8ClampedArray; width: numb
       return { quad: FULL_QUAD, found: false, score: b ? b.s : 0, method: 'none' };
     }
     const quad = b.c.q.map((p) => ({ x: clamp(p.x / W, -0.02, 1.02), y: clamp(p.y / H, -0.02, 1.02) })) as Quad;
-    return { quad: recoverFrameSpanningPage(img, refineDocumentQuad(img, quad)), found: true, score: b.s, method: b.c.method };
+    return { quad: recoverFrameSpanningPage(img, recoverVisibleLeftEdge(img, refineDocumentQuad(img, quad))), found: true, score: b.s, method: b.c.method };
   } finally {
     for (const m of mats) {
       try { m.delete(); } catch { /* already freed */ }

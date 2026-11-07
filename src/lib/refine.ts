@@ -261,3 +261,54 @@ export function cutsThroughPaper(image: RGBAImage, quad: Quad): boolean {
     }
     return false;
 }
+
+/** Recover a visible left edge when a frame-clipped candidate substitutes
+ * the image border for the paper. Keep the visible top and bottom limits. */
+export function recoverVisibleLeftEdge(image: RGBAImage, quad: Quad): Quad {
+    const { width, height, data } = image;
+    const [tl, tr, br, bl] = quad;
+    if (tl.x > .02 || tl.y > .02 || tr.y > .02 || tr.x < .97 ||
+        br.x < .97 || bl.x > .15 || bl.y < .7 || br.y < .7) return quad;
+
+    const step = Math.max(3, Math.round(width * .006));
+    const points: Pt[] = [];
+    const luma = (x: number, y: number) => {
+        const i = (y * width + x) * 4;
+        return .299 * data[i] + .587 * data[i + 1] + .114 * data[i + 2];
+    };
+    for (let i = 0; i < 32; i++) {
+        const y = Math.round(height * (.05 + .79 * i / 31));
+        let best = 18, edge = 0;
+        for (let x = 2 * step; x < width * .25; x++) {
+            const near = luma(x + step, y) - luma(x - step, y);
+            const far = luma(x + 2 * step, y) - luma(x - 2 * step, y);
+            const score = Math.min(near, far);
+            if (score > best && luma(x + step, y) > 145) {
+                best = score;
+                edge = x;
+            }
+        }
+        if (edge) points.push({ x: edge / width, y: y / height });
+    }
+    let consensus: Pt[] = [];
+    for (const a of points) for (const b of points) {
+        if (b.y - a.y < .35) continue;
+        const slope = (b.x - a.x) / (b.y - a.y);
+        if (Math.abs(slope) > .28) continue;
+        const inliers = points.filter(p => Math.abs(p.x - a.x - slope * (p.y - a.y)) < .009);
+        if (inliers.length > consensus.length) consensus = inliers;
+    }
+    if (consensus.length < 17 || consensus.at(-1)!.y - consensus[0].y < .5) return quad;
+    const line = fit(consensus);
+    if (Math.abs(line.nx) < .9) return quad;
+    const topX = (line.c - line.ny * tl.y) / line.nx;
+    const bottomSlope = (br.y - bl.y) / (br.x - bl.x);
+    const bottomX = (line.c - line.ny * (bl.y - bottomSlope * bl.x)) /
+        (line.nx + line.ny * bottomSlope);
+    if (!(topX > .05 && topX < .25 && bottomX >= 0 && bottomX < .25)) return quad;
+    const recovered: Quad = [
+        { x: topX, y: tl.y }, tr, br,
+        { x: bottomX, y: bl.y + bottomSlope * (bottomX - bl.x) },
+    ];
+    return isConvex(recovered) ? recovered : quad;
+}

@@ -3,8 +3,8 @@ import fs from 'node:fs/promises';
 import jpeg from 'jpeg-js';
 import { detectWithCV } from '../../src/lib/cvDetect';
 import { detectDocument } from '../../src/lib/detect';
-import { fixtures } from './fixtures';
-import { cutsThroughPaper, excludesPrintedContent } from '../../src/lib/refine';
+import { fixture, fixtures } from './fixtures';
+import { cutsThroughPaper, excludesPrintedContent, recoverVisibleLeftEdge } from '../../src/lib/refine';
 import type { Quad } from '../../src/lib/types';
 const require = createRequire(import.meta.url);
 const cv = await require('@techstark/opencv-js');
@@ -37,6 +37,13 @@ if (printedForm && !cutsThroughPaper(printedForm.image, printedBorder)) {
 const clippedDiagonal: Quad = [{ x: .07, y: 0 }, { x: .94, y: 0 }, { x: 1, y: 1 }, { x: 0, y: .82 }];
 if (printedForm && !cutsThroughPaper(printedForm.image, clippedDiagonal)) {
     throw new Error('A corner touching the frame must not hide an unsupported diagonal crop');
+}
+const visibleLeft: Quad = [{ x: .19, y: 0 }, { x: 1, y: 0 }, { x: 1, y: .95 }, { x: .04, y: .88 }];
+const frameGuess: Quad = [{ x: 0, y: 0 }, visibleLeft[1], visibleLeft[2], { x: .11, y: .885 }];
+const recovered = recoverVisibleLeftEdge(fixture('visible-left', visibleLeft).image, frameGuess);
+if (Math.abs(recovered[0].x - visibleLeft[0].x) > .015 ||
+    Math.abs(recovered[3].x - visibleLeft[3].x) > .015) {
+    throw new Error('Use the visible paper edge instead of the image border');
 }
 for (const f of cases) {
     const start = performance.now();
