@@ -15,7 +15,7 @@
 import type { Pt, Quad } from './types';
 import { FULL_QUAD } from './types';
 import { clamp, dist, isConvex, orderQuad, polygonArea, quadAngles } from './imageproc';
-import { isFullPageScan, recoverFrameSpanningPage, recoverVisibleLeftEdge, refineDocumentQuad } from './refine';
+import { cutsThroughPaper, excludesPrintedContent, isFullPageScan, recoverFrameSpanningPage, recoverLandscapePaperEdges, recoverVisibleLeftEdge, refineDocumentQuad } from './refine';
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 type CV = any;
@@ -310,7 +310,7 @@ function scoreQuad(c: ScoreCtx, q: Quad): number {
 
 /* ---------------------------------------------------------------- main */
 
-export function detectWithCV(cv: CV, img: { data: Uint8ClampedArray; width: number; height: number }): CvDetection {
+export function detectWithCV(cv: CV, img: { data: Uint8ClampedArray; width: number; height: number }, fast = true): CvDetection {
   if (isFullPageScan(img)) {
     return { quad: FULL_QUAD, found: true, score: 0.8, method: 'full-page' };
   }
@@ -411,6 +411,31 @@ export function detectWithCV(cv: CV, img: { data: Uint8ClampedArray; width: numb
         c.delete();
       }
       contours.delete(); hier.delete(); pmat.delete();
+    }
+
+    const finishCandidate = (candidate: Cand, score: number): CvDetection => {
+      const quad = candidate.q.map((p) => ({ x: clamp(p.x / W, -0.02, 1.02), y: clamp(p.y / H, -0.02, 1.02) })) as Quad;
+      return { quad: recoverLandscapePaperEdges(img, recoverFrameSpanningPage(img, recoverVisibleLeftEdge(img, refineDocumentQuad(img, quad)))), found: true, score: score, method: candidate.method };
+    };
+
+    // A strongly supported, fully visible paper contour needs no additional
+    // channel passes. Ambiguous and frame-clipped documents use the full search.
+    if (fast && !fillsFrame) {
+      let strongest: { candidate: Cand; score: number } | undefined;
+      for (const candidate of cands) {
+        if (candidate.q.some((p, i) => onBorder(p, candidate.q[(i + 1) % 4], W, H))) continue;
+        if (candidate.q.some(p => p.x < W * .025 || p.x > W * .975 || p.y < H * .025 || p.y > H * .975)) continue;
+        const area = polygonArea(candidate.q) / (W * H);
+        if (area < .18 || area > .82) continue;
+        const score = scoreQuad(ctx, candidate.q) + candidate.prior;
+        if (score >= .97 && (!strongest || score > strongest.score)) strongest = { candidate, score };
+      }
+      if (strongest) {
+        const fit = finishCandidate(strongest.candidate, strongest.score);
+        if (!cutsThroughPaper(img, fit.quad) && !excludesPrintedContent(img, fit.quad)) {
+          return { ...fit, method: 'paper-fast' };
+        }
+      }
     }
 
     const k3 = keep(cv.getStructuringElement(cv.MORPH_RECT, new cv.Size(3, 3)));
@@ -524,8 +549,7 @@ export function detectWithCV(cv: CV, img: { data: Uint8ClampedArray; width: numb
       }
       return { quad: FULL_QUAD, found: false, score: b ? b.s : 0, method: 'none' };
     }
-    const quad = b.c.q.map((p) => ({ x: clamp(p.x / W, -0.02, 1.02), y: clamp(p.y / H, -0.02, 1.02) })) as Quad;
-    return { quad: recoverFrameSpanningPage(img, recoverVisibleLeftEdge(img, refineDocumentQuad(img, quad))), found: true, score: b.s, method: b.c.method };
+    return finishCandidate(b.c, b.s);
   } finally {
     for (const m of mats) {
       try { m.delete(); } catch { /* already freed */ }

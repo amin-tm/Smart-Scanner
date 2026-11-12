@@ -1,4 +1,4 @@
-name: Publish SmartScanner Auto Update
+name: Publish ScanLite Auto Update
 
 on:
   workflow_dispatch:
@@ -61,8 +61,8 @@ jobs:
           repo: ${{ steps.release_config.outputs.repo }}
           releaseCommitish: main
           tagName: v__VERSION__
-          releaseName: 'Smart Scanner v__VERSION__'
-          releaseBody: 'Automatic Windows update and installer. Existing clients update automatically.'
+          releaseName: 'ScanLite v__VERSION__'
+          releaseBody: 'Signed ScanLite installer for Windows. Check for this release from the app’s Updates panel.'
           releaseDraft: false
           prerelease: false
           uploadUpdaterJson: true

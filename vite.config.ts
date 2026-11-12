@@ -11,6 +11,14 @@ const __dirname = path.dirname(__filename);
 // https://vite.dev/config/
 export default defineConfig({
   plugins: [react(), tailwindcss(), viteSingleFile()],
+  preview: {
+    headers: { 'Cache-Control': 'no-store' },
+  },
+  optimizeDeps: {
+    // These libraries are first imported from workers or after file selection.
+    // Discovering them during an import causes Vite to reload and drop the job.
+    include: ['heic-to/next', 'pdfjs-dist'],
+  },
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "src"),

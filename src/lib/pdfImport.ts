@@ -24,6 +24,7 @@ export async function renderPdf(
   file: File,
   onPage: (img: PdfPageImage, index: number, total: number) => void,
   dpi = 300,
+  shouldContinue = () => true,
 ): Promise<number> {
   configure();
   const data = new Uint8Array(await file.arrayBuffer());
@@ -31,7 +32,7 @@ export async function renderPdf(
   const total = pdf.numPages;
   const base = file.name.replace(/\.pdf$/i, '');
   try {
-    for (let i = 1; i <= total; i++) {
+    for (let i = 1; i <= total && shouldContinue(); i++) {
       const page = await pdf.getPage(i);
       const vp1 = page.getViewport({ scale: 1 });
       const scale = Math.min(dpi / 72, 4200 / Math.max(vp1.width, vp1.height));

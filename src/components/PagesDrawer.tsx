@@ -42,29 +42,30 @@ export default function PagesDrawer({
       onMouseDown={onClose}
     >
       <div
-        className="glass relative flex flex-col w-full max-w-xl max-h-[85vh] rounded-3xl border border-white/15 bg-slate-950/95 shadow-2xl shadow-black/80 overflow-hidden a-pop"
+        className="glass relative flex flex-col snap-dialog snap-dialog-pages rounded-3xl border border-white/15 bg-ink-2/95 shadow-2xl shadow-black/80 overflow-hidden a-pop"
+        role="dialog" aria-modal="true" aria-label="مدیریت صفحات"
         onMouseDown={(e) => e.stopPropagation()}
       >
         {/* Header */}
         <div className="flex items-center justify-between border-b border-white/10 px-5 py-3.5 shrink-0">
           <div className="flex items-center gap-2">
-            <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-cyan-400/15 text-cyan-300">
+            <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-brand/15 text-accent-soft">
               <Layers className="h-4 w-4" />
             </div>
-            <div className="whitespace-nowrap font-bold text-sm text-slate-100">
+            <div className="whitespace-nowrap font-bold text-sm text-paper">
               مدیریت صفحات سند ({faNum(pages.length)} صفحه)
             </div>
           </div>
           <div className="flex items-center gap-2">
             <button
               onClick={onAdd}
-              className="btn btn-ghost !px-3 !py-1.5 text-xs text-teal-300 hover:text-white whitespace-nowrap"
+              className="btn btn-ghost !px-3 !py-1.5 text-xs text-accent-soft hover:text-white whitespace-nowrap"
             >
               <Plus className="h-3.5 w-3.5" /> افزودن صفحه
             </button>
             <button
               onClick={onClose}
-              className="btn btn-ghost btn-icon !p-1.5 text-slate-400 hover:text-white"
+              className="btn btn-ghost btn-icon !p-1.5 text-muted hover:text-white"
               aria-label="بستن"
             >
               <X className="h-5 w-5" />
@@ -73,7 +74,7 @@ export default function PagesDrawer({
         </div>
 
         {/* Grid of pages */}
-        <div className="overflow-y-auto p-5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+        <div className="min-h-0 overflow-y-auto p-5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
             {pages.map((p, i) => {
               const on = p.id === selId;
@@ -85,9 +86,9 @@ export default function PagesDrawer({
                     onSelect(p.id);
                   }}
                   className={cx(
-                    'group relative aspect-[3/4] rounded-2xl border overflow-hidden cursor-pointer transition-all duration-200 bg-slate-900',
+                    'group relative aspect-[3/4] rounded-2xl border overflow-hidden cursor-pointer transition-all duration-200 bg-ink-2',
                     on
-                      ? 'border-teal-300 ring-2 ring-teal-300/40 shadow-lg shadow-teal-500/20'
+                      ? 'border-accent-soft ring-2 ring-accent-soft/40 shadow-lg shadow-brand/20'
                       : 'border-white/10 hover:border-white/30 hover:scale-[1.02]',
                   )}
                 >
@@ -121,7 +122,7 @@ export default function PagesDrawer({
                           e.stopPropagation();
                           onMove(p.id, -1);
                         }}
-                        className="flex h-6 w-6 items-center justify-center rounded-lg bg-black/70 text-white hover:bg-teal-500 disabled:opacity-30 transition"
+                        className="flex h-6 w-6 items-center justify-center rounded-lg bg-black/70 text-white hover:bg-brand disabled:opacity-30 transition"
                         title="انتقال به بالا"
                       >
                         <ArrowUp className="h-3 w-3" />
@@ -132,7 +133,7 @@ export default function PagesDrawer({
                           e.stopPropagation();
                           onMove(p.id, 1);
                         }}
-                        className="flex h-6 w-6 items-center justify-center rounded-lg bg-black/70 text-white hover:bg-teal-500 disabled:opacity-30 transition"
+                        className="flex h-6 w-6 items-center justify-center rounded-lg bg-black/70 text-white hover:bg-brand disabled:opacity-30 transition"
                         title="انتقال به پایین"
                       >
                         <ArrowDown className="h-3 w-3" />
@@ -146,7 +147,7 @@ export default function PagesDrawer({
         </div>
 
         {/* Footer */}
-        <div className="flex items-center justify-between border-t border-white/10 px-5 py-3 bg-slate-950/70 shrink-0">
+        <div className="flex items-center justify-end gap-2 border-t border-white/10 px-5 py-3 bg-ink-2/70 shrink-0">
           <button
             onClick={() => {
               if (confirm('آیا از حذف تمام صفحات مطمئن هستید؟')) {
@@ -154,7 +155,7 @@ export default function PagesDrawer({
                 onClose();
               }
             }}
-            className="btn btn-ghost !px-3 !py-1.5 text-xs text-rose-400 hover:text-rose-300 hover:bg-rose-500/10 whitespace-nowrap"
+            className="btn btn-ghost !px-5 !py-1.5 text-xs text-rose-400 hover:text-rose-300 hover:bg-rose-500/10 whitespace-nowrap"
           >
             <Trash2 className="h-3.5 w-3.5" /> پاک‌سازی همه
           </button>

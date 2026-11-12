@@ -138,9 +138,9 @@ export default function CropEditor({ page, onCommit }: { page: Page; onCommit: (
     const onKey = (e: KeyboardEvent) => {
       const t = e.target as HTMLElement | null;
       if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA')) return;
-      const dirs: Record<string, [number, number]> = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] };
+      const dirs: Record<string, [number, number]> = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], 'Shift+ArrowUp': [0, -1], 'Shift+ArrowDown': [0, 1] };
       if (e.key === 'Escape') return setActive(null);
-      const dv = dirs[e.key];
+      const dv = dirs[e.shiftKey && (e.key === 'ArrowUp' || e.key === 'ArrowDown') ? `Shift+${e.key}` : e.key];
       if (!dv) return;
       e.preventDefault();
       const step = e.shiftKey ? 10 : 1;
@@ -181,7 +181,7 @@ export default function CropEditor({ page, onCommit }: { page: Page; onCommit: (
     return lines;
   }, [quad, dw, dh, valid]);
 
-  const stroke = valid ? '#2dd4bf' : '#f87171';
+  const stroke = valid ? '#efefef' : '#f87171';
   const poly = P.map((p) => `${p.x},${p.y}`).join(' ');
 
   let loupeEl = null;
@@ -196,7 +196,7 @@ export default function CropEditor({ page, onCommit }: { page: Page; onCommit: (
     const oy = LOUPE / 2 - ly * ZOOM;
     loupeEl = (
       <div
-        className="a-pop pointer-events-none absolute z-20 overflow-hidden rounded-full border-[3px] border-teal-200 bg-slate-900 shadow-2xl shadow-black/70 ring-4 ring-teal-300/20"
+        className="a-pop pointer-events-none absolute z-20 overflow-hidden rounded-full border-[3px] border-accent-soft bg-ink-2 shadow-2xl shadow-black/70 ring-4 ring-accent-soft/20"
         style={{
           left,
           top,
@@ -212,7 +212,7 @@ export default function CropEditor({ page, onCommit }: { page: Page; onCommit: (
           <polygon points={P.map((p) => `${p.x * ZOOM + ox},${p.y * ZOOM + oy}`).join(' ')} fill="none" stroke={stroke} strokeWidth={1.5} />
           <line x1={LOUPE / 2} y1={LOUPE / 2 - 12} x2={LOUPE / 2} y2={LOUPE / 2 + 12} stroke="#fff" strokeWidth={1} />
           <line x1={LOUPE / 2 - 12} y1={LOUPE / 2} x2={LOUPE / 2 + 12} y2={LOUPE / 2} stroke="#fff" strokeWidth={1} />
-          <circle cx={LOUPE / 2} cy={LOUPE / 2} r={3} fill="none" stroke="#2dd4bf" strokeWidth={1.5} />
+          <circle cx={LOUPE / 2} cy={LOUPE / 2} r={3} fill="none" stroke="#efefef" strokeWidth={1.5} />
         </svg>
       </div>
     );
@@ -221,7 +221,7 @@ export default function CropEditor({ page, onCommit }: { page: Page; onCommit: (
   return (
     <div ref={wrapRef} className="checker absolute inset-0 flex items-center justify-center overflow-hidden">
       {!page.srcUrl || !page.width ? (
-        <Spinner className="h-8 w-8 text-teal-300" />
+        <Spinner className="h-8 w-8 text-accent-soft" />
       ) : (
         <div ref={boxRef} className="a-fade-in paper-shadow relative" style={{ width: dw, height: dh }}>
           <img src={page.srcUrl} alt="" draggable={false} className="pointer-events-none absolute inset-0 h-full w-full select-none" />
@@ -237,11 +237,11 @@ export default function CropEditor({ page, onCommit }: { page: Page; onCommit: (
           >
             <path
               d={`M${-PAD},${-PAD} H${dw + PAD} V${dh + PAD} H${-PAD} Z M${P[0].x},${P[0].y} L${P[1].x},${P[1].y} L${P[2].x},${P[2].y} L${P[3].x},${P[3].y} Z`}
-              fill="rgba(3,6,14,0.66)"
+              fill="rgba(25, 25, 25,0.66)"
               fillRule="evenodd"
               pointerEvents="none"
             />
-            <polygon points={poly} fill="rgba(45,212,191,0.05)" stroke={stroke} strokeWidth={2} pointerEvents="none" style={{ filter: `drop-shadow(0 0 5px ${stroke}99)` }} />
+            <polygon points={poly} fill="rgba(239, 239, 239,0.05)" stroke={stroke} strokeWidth={2} pointerEvents="none" style={{ filter: `drop-shadow(0 0 5px ${stroke}99)` }} />
             {grid.map(([a, b], i) => (
               <line key={i} x1={a.x} y1={a.y} x2={b.x} y2={b.y} stroke="rgba(255,255,255,0.3)" strokeWidth={1} strokeDasharray="4 5" pointerEvents="none" />
             ))}
@@ -267,8 +267,8 @@ export default function CropEditor({ page, onCommit }: { page: Page; onCommit: (
                     height={9}
                     rx={4.5}
                     transform={`rotate(${ang} ${mx} ${my})`}
-                    fill={hot ? '#2dd4bf' : '#fff'}
-                    stroke="rgba(3,6,14,0.55)"
+                    fill={hot ? '#efefef' : '#fff'}
+                    stroke="rgba(25, 25, 25,0.55)"
                     strokeWidth={1.5}
                     style={{ transition: 'fill .15s', filter: 'drop-shadow(0 2px 4px rgba(0,0,0,.5))' }}
                   />
@@ -285,13 +285,13 @@ export default function CropEditor({ page, onCommit }: { page: Page; onCommit: (
                   onPointerDown={(e) => begin(e, { kind: 'corner', idx: i })}
                 >
                   <circle cx={p.x} cy={p.y} r={26} fill="transparent" />
-                  {hot && <circle cx={p.x} cy={p.y} r={19} fill="rgba(45,212,191,0.18)" stroke="rgba(45,212,191,0.5)" />}
+                  {hot && <circle cx={p.x} cy={p.y} r={19} fill="rgba(239, 239, 239,0.18)" stroke="rgba(239, 239, 239,0.5)" />}
                   <circle
                     cx={p.x}
                     cy={p.y}
                     r={hot ? 11 : 9.5}
-                    fill={hot ? '#2dd4bf' : '#fff'}
-                    stroke="rgba(3,6,14,0.7)"
+                    fill={hot ? '#efefef' : '#fff'}
+                    stroke="rgba(25, 25, 25,0.7)"
                     strokeWidth={2}
                     style={{ transition: 'r .15s, fill .15s', filter: 'drop-shadow(0 2px 5px rgba(0,0,0,.55))' }}
                   />

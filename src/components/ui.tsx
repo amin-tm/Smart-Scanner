@@ -1,5 +1,5 @@
 import { useEffect, useState, type CSSProperties, type ReactNode } from 'react';
-import { LoaderCircle, X } from 'lucide-react';
+import { LoaderCircle, Settings2, X } from 'lucide-react';
 
 export const cx = (...a: (string | false | null | undefined)[]) => a.filter(Boolean).join(' ');
 
@@ -40,11 +40,11 @@ export function Slider({
   return (
     <div className="group">
       <div className="mb-0.5 flex items-center justify-between text-[0.78rem]">
-        <span className="text-slate-300">{label}</span>
-        <span className="tabular-nums text-slate-500 transition group-hover:text-teal-300">{value}</span>
+        <span className="text-muted">{label}</span>
+        <span className="tabular-nums text-muted transition group-hover:text-accent-soft">{value}</span>
       </div>
       <input
-        type="range"
+        type="range" aria-label={label}
         dir="ltr"
         min={min}
         max={max}
@@ -58,7 +58,7 @@ export function Slider({
   );
 }
 
-export function Modal({ title, onClose, children, width = 'max-w-xl' }: { title: string; onClose: () => void; children: ReactNode; width?: string }) {
+export function Modal({ title, onClose, children, width }: { title: string; onClose: () => void; children: ReactNode; width?: string }) {
   useEffect(() => {
     const k = (e: KeyboardEvent) => e.key === 'Escape' && onClose();
     window.addEventListener('keydown', k);
@@ -67,17 +67,17 @@ export function Modal({ title, onClose, children, width = 'max-w-xl' }: { title:
   return (
     <div className="a-fade-in fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm" onMouseDown={onClose}>
       <div
-        className={cx('app-modal-surface a-pop glass flex max-h-[90vh] w-full flex-col overflow-hidden rounded-3xl shadow-2xl shadow-black/60', width)}
-        style={{ background: 'rgba(12,18,34,0.92)' }}
+        className={cx('app-modal-surface snap-dialog snap-dialog-settings a-pop glass flex flex-col overflow-hidden rounded-3xl shadow-2xl shadow-black/60', width)}
+        role="dialog" aria-modal="true" aria-label={title}
         onMouseDown={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between border-b border-white/10 px-6 py-4">
-          <h2 className="text-lg font-bold">{title}</h2>
+          <h2 className="flex items-center gap-2 text-lg font-bold"><Settings2 size={18} className="text-accent-soft" />{title}</h2>
           <button className="btn btn-ghost btn-icon" onClick={onClose} aria-label="بستن">
             <X className="h-5 w-5" />
           </button>
         </div>
-        <div className="overflow-y-auto p-6">{children}</div>
+        <div className="min-h-0 overflow-y-auto p-6">{children}</div>
       </div>
     </div>
   );
@@ -85,7 +85,7 @@ export function Modal({ title, onClose, children, width = 'max-w-xl' }: { title:
 
 export function Chip({ children, className }: { children: ReactNode; className?: string }) {
   return (
-    <span className={cx('inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs text-slate-300', className)}>
+    <span className={cx('inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs text-muted', className)}>
       {children}
     </span>
   );

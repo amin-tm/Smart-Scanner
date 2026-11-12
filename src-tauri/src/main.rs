@@ -1,9 +1,10 @@
-// Smart Scanner - native shell (Tauri 2).
+// ScanLite - native shell (Tauri 2).
 // Keeps the app resident in the tray after the first launch, so the next start is instant.
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 use std::{
     fs,
+    io::Write,
     path::PathBuf,
     sync::atomic::{AtomicBool, Ordering},
 };
@@ -30,6 +31,9 @@ struct Flags {
 fn show_main(app: &AppHandle) {
     if let Some(w) = app.get_webview_window("main") {
         let _ = w.unminimize();
+        if !app.state::<Flags>().shown_once.swap(true, Ordering::SeqCst) {
+            let _ = w.maximize();
+        }
         let _ = w.show();
         let _ = w.set_focus();
     }
@@ -103,7 +107,7 @@ fn unique_path(dir: &PathBuf, name: &str) -> PathBuf {
 #[tauri::command]
 fn app_ready(app: AppHandle) {
     let flags = app.state::<Flags>();
-    if !flags.hidden_start && !flags.shown_once.swap(true, Ordering::SeqCst) {
+    if !flags.hidden_start && !flags.shown_once.load(Ordering::SeqCst) {
         show_main(&app);
     }
 }
@@ -124,12 +128,44 @@ async fn choose_dir(app: AppHandle, current: Option<String>) -> Option<String> {
         .map(|p| p.to_string_lossy().into_owned())
 }
 
-/// The PDF arrives as the raw request body (no JSON / base64 overhead); folder and file name in headers.
+fn checked_image_folder(app: &AppHandle, folder: &str) -> Result<PathBuf, String> {
+    let rejected = "برای خروجی عکس یک پوشهٔ شخصی انتخاب کنید؛ دسکتاپ، مسیرهای عمومی و ریشهٔ درایو مجاز نیستند.";
+    let dir = fs::canonicalize(folder).map_err(|_| rejected.to_owned())?;
+    if !dir.is_dir() || dir.parent().is_none() {
+        return Err(rejected.into());
+    }
+    let normalized = |p: &std::path::Path| PathBuf::from(p.to_string_lossy().to_lowercase());
+    let candidate = normalized(&dir);
+    let mut blocked = Vec::new();
+    if let Ok(desktop) = app.path().desktop_dir() {
+        blocked.push(desktop);
+    }
+    for variable in ["PUBLIC", "SystemRoot", "ProgramData", "ProgramFiles", "ProgramFiles(x86)"] {
+        if let Some(path) = std::env::var_os(variable) {
+            blocked.push(PathBuf::from(path));
+        }
+    }
+    for path in blocked {
+        if let Ok(path) = fs::canonicalize(path) {
+            if candidate.starts_with(normalized(&path)) {
+                return Err(rejected.into());
+            }
+        }
+    }
+    Ok(dir)
+}
+
 #[tauri::command]
-fn save_pdf(app: AppHandle, request: Request<'_>) -> Result<String, String> {
+fn validate_image_folder(app: AppHandle, folder: String) -> Result<String, String> {
+    checked_image_folder(&app, &folder).map(|path| path.to_string_lossy().into_owned())
+}
+
+/// The export arrives as the raw request body (no JSON / base64 overhead); folder and file name in headers.
+#[tauri::command]
+fn save_export(app: AppHandle, request: Request<'_>) -> Result<String, String> {
     let data = match request.body() {
         InvokeBody::Raw(d) => d,
-        _ => return Err("PDF data missing".into()),
+        _ => return Err("Export data missing".into()),
     };
     let header = |k: &str| -> String {
         request
@@ -140,11 +176,6 @@ fn save_pdf(app: AppHandle, request: Request<'_>) -> Result<String, String> {
             .unwrap_or_default()
     };
     let dir_s = header("x-dir");
-    let mut dir = if dir_s.is_empty() { default_dir(&app) } else { PathBuf::from(dir_s) };
-    if fs::create_dir_all(&dir).is_err() {
-        dir = default_dir(&app);
-        fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
-    }
     let mut name: String = header("x-filename")
         .chars()
         .map(|c| if "\\/:*?\"<>|".contains(c) { '_' } else { c })
@@ -152,8 +183,25 @@ fn save_pdf(app: AppHandle, request: Request<'_>) -> Result<String, String> {
     if name.trim().is_empty() {
         name = "Scan.pdf".into();
     }
+    let is_jpeg = name.to_ascii_lowercase().ends_with(".jpg") || name.to_ascii_lowercase().ends_with(".jpeg");
+    let dir = if is_jpeg {
+        checked_image_folder(&app, &dir_s)?
+    } else {
+        let mut dir = if dir_s.is_empty() { default_dir(&app) } else { PathBuf::from(dir_s) };
+        if fs::create_dir_all(&dir).is_err() {
+            dir = default_dir(&app);
+            fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+        }
+        dir
+    };
     let path = unique_path(&dir, &name);
-    fs::write(&path, data).map_err(|e| e.to_string())?;
+    if is_jpeg {
+        let mut file = fs::OpenOptions::new().write(true).create_new(true).open(&path)
+            .map_err(|e| e.to_string())?;
+        file.write_all(data).map_err(|e| e.to_string())?;
+    } else {
+        fs::write(&path, data).map_err(|e| e.to_string())?;
+    }
     Ok(path.to_string_lossy().into_owned())
 }
 
@@ -233,7 +281,8 @@ fn main() {
             app_ready,
             get_default_dir,
             choose_dir,
-            save_pdf,
+            save_export,
+            validate_image_folder,
             open_path,
             show_in_folder,
             set_background_mode,
@@ -258,7 +307,7 @@ fn main() {
             let quit = MenuItem::with_id(app, "quit", "خروج کامل", true, None::<&str>)?;
             let menu = Menu::with_items(app, &[&show, &quit])?;
             let mut tray = TrayIconBuilder::new()
-                .tooltip("اسکنر هوشمند - Smart Scanner")
+                .tooltip("ScanLite")
                 .menu(&menu)
                 .show_menu_on_left_click(false)
                 .on_menu_event(|app, event| match event.id.as_ref() {
@@ -293,5 +342,5 @@ fn main() {
             }
         })
         .run(tauri::generate_context!())
-        .expect("error while running Smart Scanner");
+        .expect("error while running ScanLite");
 }

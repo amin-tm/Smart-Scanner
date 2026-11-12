@@ -1,90 +1,100 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { CircleArrowDown, RefreshCw } from 'lucide-react';
 import { checkUpdate, installUpdate, isDesktop } from '../lib/desktop';
+import { version as currentVersion } from '../../src-tauri/tauri.conf.json';
+import { Modal, Presence, Spinner } from './ui';
 
-/**
- * Checks for a signed release at startup, when the internet reconnects, and
- * every 4 hours. When the editor is empty it installs automatically; otherwise
- * it asks the user to finish or save the unsaved scan first.
- */
-export default function AutoUpdateNotice({ hasWork }: { hasWork: boolean }) {
+export default function AutoUpdateNotice({ open, onClose, hasWork }: {
+  open: boolean;
+  onClose: () => void;
+  hasWork: boolean;
+}) {
+  const desktop = isDesktop();
   const [version, setVersion] = useState<string | null>(null);
-  const [installing, setInstalling] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [dismissed, setDismissed] = useState(false);
-  const checking = useRef(false);
-  const installingRef = useRef(false);
-  const hasWorkRef = useRef(hasWork);
-  hasWorkRef.current = hasWork;
+  const [status, setStatus] = useState<'idle' | 'checking' | 'checked' | 'installing'>('idle');
+  const [error, setError] = useState('');
+  const [confirm, setConfirm] = useState(false);
+  const running = useRef(false);
+
+  const check = useCallback(async () => {
+    if (!desktop || running.current) return;
+    running.current = true;
+    setStatus('checking');
+    setError('');
+    try {
+      setVersion(await checkUpdate());
+      setStatus('checked');
+    } catch {
+      setError('بررسی نسخهٔ جدید انجام نشد. دوباره تلاش کنید.');
+      setStatus('idle');
+    } finally {
+      running.current = false;
+    }
+  }, [desktop]);
 
   useEffect(() => {
-    if (!isDesktop()) return;
-    let disposed = false;
-
-    const apply = async () => {
-      if (installingRef.current || disposed) return;
-      installingRef.current = true;
-      setInstalling(true);
-      setError(null);
-      try {
-        await installUpdate();
-      } catch (err) {
-        if (!disposed) setError(`نصب به‌روزرسانی انجام نشد: ${String(err)}`);
-      } finally {
-        installingRef.current = false;
-        if (!disposed) setInstalling(false);
-      }
-    };
-
-    const check = async () => {
-      if (checking.current || installingRef.current || disposed) return;
-      checking.current = true;
-      try {
-        const next = await checkUpdate();
-        if (disposed) return;
-        setVersion(next);
-        if (next && !hasWorkRef.current) await apply();
-      } catch (err) {
-        // No internet should never stop the scanner from working.
-        console.warn('[updater] check failed', err);
-      } finally {
-        checking.current = false;
-      }
-    };
-
-    const first = window.setTimeout(() => void check(), 8000);
-    const periodic = window.setInterval(() => void check(), 4 * 60 * 60 * 1000);
-    const online = () => void check();
-    window.addEventListener('online', online);
-    // The UI can request installation after the user has finished their work.
-    const installClick = () => void apply();
-    window.addEventListener('smartscanner-install-update', installClick);
+    if (!desktop) return;
+    const refresh = () => { void check(); };
+    const first = window.setTimeout(refresh, 8000);
+    const periodic = window.setInterval(refresh, 4 * 60 * 60 * 1000);
+    window.addEventListener('online', refresh);
     return () => {
-      disposed = true;
       window.clearTimeout(first);
       window.clearInterval(periodic);
-      window.removeEventListener('online', online);
-      window.removeEventListener('smartscanner-install-update', installClick);
+      window.removeEventListener('online', refresh);
     };
-  }, []);
+  }, [desktop, check]);
 
-  if ((!version || dismissed) && !error) return null;
+  useEffect(() => { if (open && status === 'idle' && !error) void check(); }, [open, status, error, check]);
+  useEffect(() => { if (!open) setConfirm(false); }, [open]);
+
+  const install = async () => {
+    if (!desktop || running.current) return;
+    if (hasWork && !confirm) { setConfirm(true); return; }
+    running.current = true;
+    setStatus('installing');
+    setError('');
+    setConfirm(false);
+    try {
+      if (!(await installUpdate())) setVersion(null);
+    } catch {
+      setError('دانلود یا نصب نسخهٔ جدید انجام نشد. دوباره تلاش کنید.');
+    } finally {
+      running.current = false;
+      setStatus('checked');
+    }
+  };
+
+  const busy = status === 'checking' || status === 'installing';
+  const message = !desktop ? 'بررسی و نصب به‌روزرسانی در برنامهٔ ویندوز انجام می‌شود.'
+    : status === 'checking' ? 'در حال بررسی نسخهٔ جدید…'
+    : status === 'installing' ? 'در حال دانلود و نصب…'
+    : version ? 'نسخهٔ جدید آمادهٔ نصب است.'
+    : status === 'checked' ? 'ScanLite به‌روز است.' : '';
+
   return (
-    <div className="relative z-30 mx-4 mt-2 flex flex-wrap items-center justify-center gap-3 rounded-xl border border-teal-300/30 bg-slate-900/95 px-4 py-2 text-sm text-white shadow-lg" dir="rtl">
-      <span>{error ?? `نسخه جدید Smart Scanner (${version}) آماده نصب است.`}</span>
-      {version && !installing && !dismissed && (
-        <button
-          type="button"
-          className="rounded-lg bg-teal-500 px-3 py-1.5 font-bold text-slate-950"
-          onClick={() => {
-            if (hasWork && !window.confirm('ابتدا خروجی PDF اسکن‌های فعلی را ذخیره کن؛ نصب آپدیت برنامه را می‌بندد. ادامه می‌دهی؟')) return;
-            window.dispatchEvent(new Event('smartscanner-install-update'));
-          }}
-        >
-          نصب آپدیت
-        </button>
-      )}
-      {installing && <span className="text-teal-300">در حال دانلود و نصب نسخه جدید…</span>}
-      <button type="button" className="text-slate-300 underline" onClick={() => { setDismissed(true); setError(null); }}>بعداً</button>
-    </div>
+    <Presence show={open}>
+      <Modal title="به‌روزرسانی ScanLite" width="snap-dialog-update" onClose={onClose}>
+        <div className="work-update-card">
+          <span className="work-update-icon" aria-hidden="true"><CircleArrowDown size={25} /></span>
+          <div>
+            <strong>نسخهٔ نصب‌شده <bdi>{currentVersion}</bdi></strong>
+            {version && <div>نسخهٔ جدید <bdi>{version}</bdi></div>}
+            <p role="status">{message}</p>
+          </div>
+        </div>
+        {error && <p className="work-update-message" role="alert">{error}</p>}
+        {confirm && <p className="work-update-message">نصب، برنامه را می‌بندد. اگر سند فعلی را ذخیره کرده‌اید، نصب را تأیید کنید.</p>}
+        {desktop && <div className="work-update-actions">
+          {confirm && <button className="work-button" onClick={() => setConfirm(false)}>انصراف</button>}
+          {!confirm && <button className="work-button" disabled={busy} onClick={() => void check()}>
+            {status === 'checking' ? <Spinner className="size-4" /> : <RefreshCw size={16} />} بررسی نسخهٔ جدید
+          </button>}
+          {version && <button className="work-button work-primary" disabled={busy} onClick={() => void install()}>
+            {confirm ? 'تأیید نصب' : 'دانلود و نصب'}
+          </button>}
+        </div>}
+      </Modal>
+    </Presence>
   );
 }

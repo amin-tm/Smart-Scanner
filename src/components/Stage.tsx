@@ -7,7 +7,6 @@ import {
   RotateCcw,
   RotateCw,
   ScanLine,
-  Sparkles,
   Trash2,
   Undo2,
   Wand2,
@@ -17,46 +16,17 @@ import {
   Layers,
 } from 'lucide-react';
 import CropEditor from './CropEditor';
-import { cx, Spinner } from './ui';
+import { cx } from './ui';
 import { displayOf } from '../lib/useScanner';
 import { faNum } from '../lib/storage';
-import { FULL_QUAD, FILTERS, type FilterId, type Page, type Quad } from '../lib/types';
-
-function PrintReadyBadge({ filter }: { filter: FilterId }) {
-  const white = filter === 'magic' || filter === 'gray' || filter === 'bw';
-  const label =
-    filter === 'magic'
-      ? 'رنگ جادویی · مناسب چاپ'
-      : filter === 'gray' || filter === 'bw'
-      ? 'سفید چاپی'
-      : filter === 'noshadow'
-      ? 'بدون سایه'
-      : filter === 'lighten'
-      ? 'روشن'
-      : 'بدون سفیدسازی';
-
-  return (
-    <div className="pointer-events-none absolute bottom-4 end-4 z-10">
-      <div
-        className={cx(
-          'a-fade-in flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-[0.7rem] font-bold backdrop-blur whitespace-nowrap shadow-lg',
-          white
-            ? 'border-teal-300/60 bg-teal-400/20 text-teal-100 shadow-teal-500/30'
-            : 'border-white/15 bg-black/60 text-slate-300',
-        )}
-      >
-        {white && <Sparkles className="h-3.5 w-3.5 text-teal-300" />}
-        <span>{label}</span>
-      </div>
-    </div>
-  );
-}
+import { FULL_QUAD, FILTERS, type Page, type Quad } from '../lib/types';
 
 function Tool({
   icon,
   label,
   active,
   danger,
+  motion,
   className,
   children,
   ...rest
@@ -65,21 +35,24 @@ function Tool({
   label: string;
   active?: boolean;
   danger?: boolean;
+  motion?: 'crop' | 'rotate-left' | 'rotate-right' | 'eye' | 'zoom' | 'trash' | 'undo' | 'wand' | 'full' | 'confirm';
   children?: ReactNode;
 } & ButtonHTMLAttributes<HTMLButtonElement>) {
   return (
     <button
       className={cx(
-        'btn btn-ghost !gap-1.5 !px-2.5 !py-1.5 sm:!px-3 sm:!py-2 text-[0.78rem] whitespace-nowrap shrink-0 transition-all duration-150',
+        'btn stage-tool',
         active && 'btn-active',
-        danger && 'hover:!bg-rose-500/20 hover:!text-rose-200',
+        danger && 'stage-tool-danger',
         className,
       )}
-      title={label}
+      aria-label={label}
+      data-tooltip={label}
+      data-motion={motion}
       {...rest}
     >
       {icon}
-      <span className="whitespace-nowrap">{children ?? label}</span>
+      <span className="sr-only">{children ?? label}</span>
     </button>
   );
 }
@@ -90,6 +63,7 @@ export default function Stage({
   setCrop,
   pageIndex,
   totalPages,
+  onRetryPreview,
   onQuad,
   onRotate,
   onDelete,
@@ -101,6 +75,7 @@ export default function Stage({
   setCrop: (v: boolean) => void;
   pageIndex: number;
   totalPages: number;
+  onRetryPreview: () => void;
   onQuad: (q: Quad) => void;
   onRotate: (dir: 1 | -1) => void;
   onDelete: () => void;
@@ -150,30 +125,23 @@ export default function Stage({
 
   if (!ready) {
     return (
-      <div className="checker relative flex h-full items-center justify-center overflow-hidden rounded-3xl border border-white/10 p-6">
+      <div className="checker relative flex h-full items-center justify-center overflow-hidden p-5">
         {page.status === 'error' ? (
           <div className="a-fade-up text-center">
             <div className="mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-2xl bg-rose-500/15 text-rose-300">
               <ScanLine className="h-7 w-7" />
             </div>
             <p className="font-semibold text-rose-200 whitespace-nowrap">این فایل پردازش نشد</p>
-            <p className="mt-1 text-xs text-slate-400 whitespace-nowrap">{page.error}</p>
+            <p className="mt-1 text-xs text-muted whitespace-nowrap">{page.error}</p>
             <button className="btn mt-4 whitespace-nowrap" onClick={onDelete}>
               <Trash2 className="h-4 w-4" /> حذف
             </button>
           </div>
         ) : (
-          <div className="a-fade-up relative flex flex-col items-center justify-center p-8 rounded-2xl border border-white/15 bg-slate-900/80 backdrop-blur-md shadow-2xl">
-            <div className="relative mb-4 h-24 w-20 overflow-hidden rounded-xl border border-teal-300/30 bg-white/10">
-              <div className="shimmer absolute inset-0" />
-              <div className="scan-line" />
-            </div>
-            <div className="flex items-center gap-2 text-sm font-bold text-teal-200 whitespace-nowrap">
-              <Spinner className="h-4 w-4" />
-              <span>در حال تشخیص هوشمند لبه‌ها و سفیدسازی...</span>
-            </div>
-            <div className="mt-1 text-xs text-slate-400 whitespace-nowrap">
-              لطفاً چند لحظه شکیبا باشید
+          <div className="snap-import-preview">
+            <div className={`snap-processing snap-glass-loading${pageIndex === 0 ? ' snap-first-import' : ''}`} role="status">
+              {pageIndex === 0 && <div className="snap-processing-icon" aria-hidden="true"><ScanLine size={32} /><i /></div>}
+              <div><ScanLine className="stage-scan-indicator size-4" aria-hidden="true" /> در حال پردازش سند</div>
             </div>
           </div>
         )}
@@ -192,23 +160,21 @@ export default function Stage({
           {crop ? (
             <>
               <Tool
-                icon={<Wand2 className="h-4 w-4 text-teal-300" />}
+                icon={<Wand2 className="h-4 w-4 text-accent-soft" />}
                 label="تشخیص خودکار لبه"
+                motion="wand"
                 onClick={() => page.autoQuad && onQuad(page.autoQuad)}
                 disabled={!page.autoQuad}
               />
               <Tool
                 icon={<Maximize2 className="h-4 w-4" />}
                 label="تمام تصویر"
+                motion="full"
                 onClick={() => onQuad(FULL_QUAD)}
               />
               <div className="mx-1 h-5 w-px bg-white/15 shrink-0" />
-              <button
-                className="btn btn-primary !rounded-xl !px-4 !py-1.5 text-xs whitespace-nowrap"
-                onClick={() => setCrop(false)}
-              >
-                <Check className="h-4 w-4" strokeWidth={3} /> تأیید برش
-              </button>
+              <Tool icon={<Check className="h-4 w-4" strokeWidth={3} />}
+                label="تأیید برش" motion="confirm" onClick={() => setCrop(false)} />
             </>
           ) : (
             <>
@@ -216,15 +182,16 @@ export default function Stage({
               <Tool
                 icon={<Crop className="h-4 w-4" />}
                 label="برش لبه‌ها"
+                motion="crop"
                 onClick={() => setCrop(true)}
               />
 
               {/* Filter popup trigger */}
               <Tool
-                icon={<Palette className="h-4 w-4 text-teal-300" />}
+                icon={<Palette className="h-4 w-4 text-accent-soft" />}
                 label="فیلتر و رنگ جادویی"
                 onClick={onOpenFilters}
-                className="!bg-teal-400/10 hover:!bg-teal-400/20 !border-teal-300/30"
+                className="work-compact-filter !bg-brand/10 hover:!bg-brand/20 !border-accent-soft/30"
               >
                 <span>فیلتر: {curFilterLabel}</span>
               </Tool>
@@ -235,12 +202,14 @@ export default function Stage({
               <Tool
                 icon={<RotateCcw className="h-4 w-4" />}
                 label="چرخش چپ"
+                motion="rotate-left"
                 aria-label="چرخش چپ"
                 onClick={() => onRotate(-1)}
               ><span className="desktop-tool-text">چرخش چپ</span></Tool>
               <Tool
                 icon={<RotateCw className="h-4 w-4" />}
                 label="چرخش راست"
+                motion="rotate-right"
                 aria-label="چرخش راست"
                 onClick={() => onRotate(1)}
               ><span className="desktop-tool-text">چرخش راست</span></Tool>
@@ -249,6 +218,7 @@ export default function Stage({
               <Tool
                 icon={<Eye className="h-4 w-4" />}
                 label="نگه‌دارید برای دیدن اصلی"
+                motion="eye"
                 active={compare}
                 onPointerDown={() => setCompare(true)}
                 onPointerUp={() => setCompare(false)}
@@ -261,8 +231,9 @@ export default function Stage({
 
               {/* Pages drawer popup trigger */}
               <Tool
-                icon={<Layers className="h-4 w-4 text-cyan-300" />}
+                icon={<Layers className="h-4 w-4 text-accent-soft" />}
                 label="لیست و مدیریت صفحات"
+                className="work-compact-pages"
                 onClick={onOpenPages}
               >
                 <span>صفحه {faNum(pageIndex + 1)} از {faNum(totalPages)}</span>
@@ -274,6 +245,7 @@ export default function Stage({
               <Tool
                 icon={<ZoomOut className="h-4 w-4" />}
                 label="کوچک‌نمایی"
+                motion="zoom"
                 onClick={() => setZoom((z) => Math.max(1, z / 1.35))}
                 disabled={zoom <= 1}
               >
@@ -282,6 +254,7 @@ export default function Stage({
               <Tool
                 icon={<ZoomIn className="h-4 w-4" />}
                 label="بزرگ‌نمایی"
+                motion="zoom"
                 onClick={() => setZoom((z) => Math.min(5, z * 1.35))}
               >
                 <span className="sr-only">بزرگ‌نمایی</span>
@@ -290,6 +263,7 @@ export default function Stage({
                 <Tool
                   icon={<Undo2 className="h-4 w-4" />}
                   label="اندازه ۱۰۰٪"
+                motion="undo"
                   onClick={() => {
                     setZoom(1);
                     setPan({ x: 0, y: 0 });
@@ -303,6 +277,7 @@ export default function Stage({
               <Tool
                 icon={<Trash2 className="h-4 w-4" />}
                 label="حذف صفحه"
+                motion="trash"
                 onClick={onDelete}
                 danger
               >
@@ -314,6 +289,12 @@ export default function Stage({
       </div>
 
       <div className="desktop-canvas">
+        <span className="stage-page-number">صفحهٔ {faNum(pageIndex + 1)}</span>
+        {page.autoCropPending && !compare && (
+          <div className="snap-processing stage-processing snap-glass-loading" role="status">
+            <div><ScanLine className="stage-scan-indicator size-4" aria-hidden="true" /> در حال پردازش سند</div>
+          </div>
+        )}
       {crop ? (
         <CropEditor page={page} onCommit={onQuad} />
       ) : (
@@ -330,7 +311,7 @@ export default function Stage({
             setPan({ x: 0, y: 0 });
           }}
         >
-          {d && (
+          {d && (!d.stale || compare) && (
             <img
               key={compare ? 'orig' : 'out'}
               src={compare && page.srcUrl ? page.srcUrl : d.url}
@@ -344,11 +325,13 @@ export default function Stage({
               }}
             />
           )}
-          {(d?.stale || !d) && (
-            <div className="a-fade-in absolute left-1/2 top-3 -translate-x-1/2 rounded-full bg-black/60 px-3 py-1.5 text-xs text-teal-100 backdrop-blur whitespace-nowrap">
-              <span className="inline-flex items-center gap-2">
-                <Spinner className="h-3.5 w-3.5" /> در حال به‌روزرسانی
-              </span>
+          {!compare && !page.autoCropPending && (d?.stale || !d) && (
+            <div className="snap-processing stage-processing snap-glass-loading" role="status">
+              <div>
+                {page.previewErrorRev === page.rev ? (
+                  <button type="button" onClick={onRetryPreview}>پیش‌نمایش آماده نشد · تلاش دوباره</button>
+                ) : <><ScanLine className="stage-scan-indicator size-4" aria-hidden="true" /> در حال به‌روزرسانی</>}
+              </div>
             </div>
           )}
           {compare && (
@@ -356,14 +339,13 @@ export default function Stage({
               عکس اولیه (بدون فیلتر و پرسپکتیو)
             </div>
           )}
-          {!compare && <PrintReadyBadge filter={page.filter} />}
         </div>
       )}
 
       </div>
       {crop && (
         <div className="desktop-crop-help">
-          <div className="a-fade-up rounded-full bg-slate-950/85 border border-white/15 px-4 py-1.5 text-xs text-slate-200 backdrop-blur text-center">
+          <div className="a-fade-up rounded-full bg-ink-2/85 border border-white/15 px-4 py-1.5 text-xs text-paper backdrop-blur text-center">
             گوشه‌ها را بکشید · دستگیره وسط هر ضلع فقط همان خط را جابه‌جا می‌کند
           </div>
         </div>

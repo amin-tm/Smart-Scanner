@@ -4,7 +4,7 @@ import jpeg from 'jpeg-js';
 import { detectWithCV } from '../../src/lib/cvDetect';
 import { detectDocument } from '../../src/lib/detect';
 import { fixture, fixtures } from './fixtures';
-import { cutsThroughPaper, excludesPrintedContent, recoverVisibleLeftEdge } from '../../src/lib/refine';
+import { cutsThroughPaper, excludesPrintedContent, recoverLandscapePaperEdges, recoverVisibleLeftEdge } from '../../src/lib/refine';
 import type { Quad } from '../../src/lib/types';
 const require = createRequire(import.meta.url);
 const cv = await require('@techstark/opencv-js');
@@ -44,6 +44,13 @@ const recovered = recoverVisibleLeftEdge(fixture('visible-left', visibleLeft).im
 if (Math.abs(recovered[0].x - visibleLeft[0].x) > .015 ||
     Math.abs(recovered[3].x - visibleLeft[3].x) > .015) {
     throw new Error('Use the visible paper edge instead of the image border');
+}
+const stackedPaper: Quad = [{ x: .075, y: .025 }, { x: .94, y: .045 }, { x: .96, y: .89 }, { x: .05, y: .95 }];
+const frameBound: Quad = [{ x: 0, y: .045 }, { x: .92, y: .045 }, { x: .85, y: 1 }, { x: 0, y: 1 }];
+const landscapeRecovery = recoverLandscapePaperEdges(
+    fixture('stacked-landscape', stackedPaper, { width: 960, height: 720, frame: true }).image, frameBound);
+if (landscapeRecovery.some((point, i) => Math.hypot(point.x - stackedPaper[i].x, point.y - stackedPaper[i].y) > .032)) {
+    throw new Error('A landscape crop must follow the visible sheet rather than borrowing image borders');
 }
 for (const f of cases) {
     const start = performance.now();

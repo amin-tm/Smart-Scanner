@@ -1,5 +1,5 @@
-import { useEffect, useState, type ReactNode } from 'react';
-import { FolderOpen, Power } from 'lucide-react';
+import { useEffect, useState, type CSSProperties, type ReactNode } from 'react';
+import { Check, ChevronDown, FolderOpen, Power } from 'lucide-react';
 import { Modal, Toggle, cx } from './ui';
 import { chooseDir, getAutostart, isDesktop, setAutostart, setBackgroundMode } from '../lib/desktop';
 import { FILTERS, QUALITY, type PageSizeId, type QualityId, type Settings } from '../lib/types';
@@ -18,7 +18,7 @@ function Row({ title, hint, children }: { title: string; hint?: string; children
     <div className="flex items-center justify-between gap-4 py-3">
       <div className="min-w-0">
         <div className="text-sm font-semibold">{title}</div>
-        {hint && <div className="mt-0.5 text-xs leading-5 text-slate-500">{hint}</div>}
+        {hint && <div className="mt-0.5 text-xs leading-5 text-muted">{hint}</div>}
       </div>
       {children}
     </div>
@@ -26,17 +26,48 @@ function Row({ title, hint, children }: { title: string; hint?: string; children
 }
 
 function Seg<T extends string>({ value, options, onChange }: { value: T; options: { id: T; label: string }[]; onChange: (v: T) => void }) {
+  const selected = options.findIndex(option => option.id === value);
+  const position = { '--segments': options.length, '--selected': selected } as CSSProperties;
   return (
-    <div className="flex flex-wrap justify-end gap-1 rounded-xl bg-black/30 p-1">
-      {options.map((o) => (
-        <button
-          key={o.id}
-          onClick={() => onChange(o.id)}
-          className={cx('rounded-lg px-3 py-1.5 text-xs font-semibold transition', value === o.id ? 'bg-teal-300 text-slate-900 shadow' : 'text-slate-400 hover:text-white')}
-        >
-          {o.label}
-        </button>
+    <div className="settings-segment" role="group" style={position}>
+      <span aria-hidden="true" className="settings-segment-marker" />
+      {options.map(option => (
+        <button key={option.id} type="button" aria-pressed={value === option.id}
+          lang={/^[A-Za-z]/.test(option.label) ? 'en' : undefined}
+          onClick={() => onChange(option.id)}>{option.label}</button>
       ))}
+    </div>
+  );
+}
+
+function DefaultFilter({ value, onChange }: {
+  value: Settings['defaultFilter'];
+  onChange: (value: Settings['defaultFilter']) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const current = FILTERS.find(filter => filter.id === value);
+  return (
+    <div className="settings-picker" onBlur={event => {
+      if (!event.currentTarget.contains(event.relatedTarget)) setOpen(false);
+    }} onKeyDown={event => {
+      if (open && event.key === 'Escape') {
+        event.stopPropagation();
+        setOpen(false);
+        event.currentTarget.querySelector('button')?.focus();
+      }
+    }}>
+      <button type="button" className="settings-picker-trigger" aria-label="فیلتر پیش‌فرض" aria-expanded={open} onClick={() => setOpen(!open)}>
+        <span>{current?.label}</span><ChevronDown size={16} />
+      </button>
+      {open && <div className="settings-picker-options" role="group" aria-label="فیلترهای پیش‌فرض">
+        {FILTERS.map(filter => (
+          <button type="button" key={filter.id} aria-pressed={filter.id === value} onClick={event => {
+            onChange(filter.id);
+            event.currentTarget.closest('.settings-picker')?.querySelector('button')?.focus();
+            setOpen(false);
+          }}><span>{filter.label}</span>{filter.id === value && <Check size={15} />}</button>
+        ))}
+      </div>}
     </div>
   );
 }
@@ -58,17 +89,7 @@ export default function SettingsDialog({ s, onChange, onClose }: { s: Settings; 
           <Seg<PageSizeId> value={s.pageSize} onChange={(v) => onChange({ pageSize: v })} options={SIZES} />
         </Row>
         <Row title="فیلتر پیش‌فرض" hint="برای هر عکس جدید">
-          <select
-            value={s.defaultFilter}
-            onChange={(e) => onChange({ defaultFilter: e.target.value as Settings['defaultFilter'] })}
-            className="rounded-xl border border-white/10 bg-slate-900 px-3 py-2 text-sm outline-none focus:border-teal-300"
-          >
-            {FILTERS.map((f) => (
-              <option key={f.id} value={f.id}>
-                {f.label}
-              </option>
-            ))}
-          </select>
+          <DefaultFilter value={s.defaultFilter} onChange={value => onChange({ defaultFilter: value })} />
         </Row>
         <Row title="تشخیص خودکار لبه‌ها" hint="سند داخل عکس خودکار پیدا و صاف می‌شود">
           <Toggle on={s.autoDetect} onChange={(v) => onChange({ autoDetect: v })} />
@@ -85,7 +106,7 @@ export default function SettingsDialog({ s, onChange, onClose }: { s: Settings; 
             value={s.filePrefix}
             onChange={(e) => onChange({ filePrefix: e.target.value })}
             dir="ltr"
-            className="w-36 rounded-xl border border-white/10 bg-slate-900 px-3 py-2 text-sm outline-none focus:border-teal-300"
+            className="w-36 rounded-xl border border-white/10 bg-ink-2 px-3 py-2 text-sm outline-none focus:border-accent-soft"
           />
         </Row>
 
@@ -116,7 +137,7 @@ export default function SettingsDialog({ s, onChange, onClose }: { s: Settings; 
             </Row>
             <Row title="اجرا همراه با ویندوز" hint="بی‌صدا در پس‌زمینه بالا می‌آید تا همیشه آماده باشد">
               <div className="flex items-center gap-2">
-                <Power className={cx('h-4 w-4', auto ? 'text-teal-300' : 'text-slate-600')} />
+                <Power className={cx('h-4 w-4', auto ? 'text-accent-soft' : 'text-muted')} />
                 <Toggle
                   on={auto}
                   onChange={async (v) => {

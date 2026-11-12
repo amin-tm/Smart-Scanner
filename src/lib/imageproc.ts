@@ -998,7 +998,11 @@ function applyNormalizedTone(img: RGBAImage, bg: Background, filter: FilterId, a
       const index = clamp(Math.round((luminance + dl) * ls), 0, LUT_N);
       let tone = lut[index];
       if (sat !== 0) tone = Math.min(tone, 1 - 0.22 * (1 - neutral));
-      const whitening = clamp((tone - wc0) * wcr, 0, 1) * (sat === 0 ? 1 : neutral);
+      // A weak stroke can still land above the white point. Use its local
+      // contrast to retain some ink before whitening the surrounding paper.
+      const ink = clamp((-dl - .008) * 9, 0, .48);
+      tone = Math.min(tone, 1 - ink);
+      const whitening = clamp((tone - wc0) * wcr, 0, 1) * (sat === 0 ? 1 : neutral) * (1 - 2 * ink);
       tone += (1 - tone) * whitening;
       let gain = sat === 0 ? 0 : 1 + (sat - 1) * 0.25;
       const high = Math.max(r, g, b) - luminance;

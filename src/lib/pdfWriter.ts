@@ -70,7 +70,7 @@ export function buildPdf(images: PdfImage[], size: PageSizeId): Uint8Array {
   const kids = images.map((_, i) => `${4 + i * 3} 0 R`).join(' ');
   obj(1, '<< /Type /Catalog /Pages 2 0 R >>');
   obj(2, `<< /Type /Pages /Kids [${kids}] /Count ${n} >>`);
-  obj(3, `<< /Producer (Smart Scanner) /Creator (Smart Scanner) /CreationDate (${pdfDate(new Date())}) >>`);
+  obj(3, `<< /Producer (ScanLite) /Creator (ScanLite) /CreationDate (${pdfDate(new Date())}) >>`);
 
   images.forEach((im, i) => {
     const pid = 4 + i * 3;

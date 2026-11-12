@@ -1,11 +1,11 @@
 @echo off
 setlocal EnableDelayedExpansion
 cd /d "%~dp0"
-title Smart Scanner - Build Windows installer (Tauri)
+title ScanLite - Build Windows installer (Tauri)
 
 echo.
 echo ============================================================
-echo   Smart Scanner  -  Windows installer (Tauri, no Electron)
+echo   ScanLite  -  Windows installer (Tauri, no Electron)
 echo ============================================================
 echo.
 
@@ -57,7 +57,7 @@ echo.
 echo ============================================================
 echo   DONE!  Installer is in the "release" folder.
 echo ============================================================
-echo   - Run the setup, then open Smart Scanner once.
+echo   - Run the setup, then open ScanLite once.
 echo   - From then on it stays running in the background (tray) and
 echo     starts silently with Windows, so it opens instantly.
 echo.

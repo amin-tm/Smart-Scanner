@@ -37,19 +37,20 @@ export interface Page {
   quad: Quad;
   autoQuad: Quad | null;
   detected: boolean;
+  autoCropPending?: boolean;
   rotation: number;
   filter: FilterId;
   adjust: Adjust;
   status: PageStatus;
   error?: string;
   fromPdf?: boolean;
-  /** small working copy of the original photo (<= 1800 px) – used by the crop editor and fast previews */
-  proxy?: Blob;
   srcUrl?: string;
   /** fast interactive preview of the current settings */
   prev?: { url: string; width: number; height: number; rev: number };
   /** crop + rotation the thumbnails were made for */
   thumbKey?: string;
+  thumbnailError?: string;
+  previewErrorRev?: number;
   /** thumbnails exist for every filter (otherwise only for the current one) */
   thumbsAll?: boolean;
   /** final processed page (this exact image goes into the PDF) */
@@ -110,8 +111,8 @@ export const FILTERS: { id: FilterId; label: string; hint: string }[] = [
 /** long side of the exported page image (px) + JPEG quality */
 export const QUALITY: Record<QualityId, { label: string; hint: string; maxOut: number; jpeg: number }> = {
   fast: { label: 'سریع', hint: 'حجم کم · ۲۰۰ DPI', maxOut: 2339, jpeg: 0.85 },
-  standard: { label: 'متعادل', hint: 'پیشنهادی · ۲۵۰ DPI', maxOut: 3008, jpeg: 0.88 },
-  high: { label: 'چاپ', hint: 'کیفیت بالا · ۳۵۰+ DPI', maxOut: 4200, jpeg: 0.92 },
+  standard: { label: 'متعادل', hint: 'پیشنهادی · تا ۲۵۰ DPI', maxOut: 3008, jpeg: 0.94 },
+  high: { label: 'چاپ', hint: 'نمونه‌برداری دقیق‌تر برای چاپ', maxOut: 4200, jpeg: 0.97 },
 };
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -134,8 +135,6 @@ export interface ProcessMsg {
   type: 'process';
   id: string;
   blob: Blob;
-  /** run auto edge detection (otherwise `quad` is used) */
-  detect: boolean;
   quad: Quad;
   rotation: number;
   filter: FilterId;
@@ -147,26 +146,30 @@ export interface ProcessMsg {
   maxOut: number;
   jpeg: number;
   bicubic: boolean;
+  upscale?: boolean;
   /** keep decoded source + warp in the worker (interactive edits) */
   cache: boolean;
-  makeProxy: boolean;
   /** filters to produce 300px thumbnails for (empty = none) */
   thumbs: FilterId[];
 }
 
 export interface ProcessResult {
-  width: number;
-  height: number;
-  quad: Quad;
-  found: boolean;
-  score: number;
   out: Blob;
   outW: number;
   outH: number;
-  proxy?: Blob | null;
   thumbs?: { filter: FilterId; blob: Blob }[];
   /** milliseconds spent per stage (diagnostics) */
   timing?: Record<string, number>;
 }
 
-export type WorkerMsg = ProcessMsg;
+export interface DetectMsg {
+  type: 'detect';
+  id: string;
+  blob: Blob;
+}
+
+export interface DetectResult {
+  quad: Quad;
+  found: boolean;
+  timing?: Record<string, number>;
+}

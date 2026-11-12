@@ -38,23 +38,31 @@ export const getAutostart = async () => (await call<boolean>('get_autostart')) ?
 export const setAutostart = (enabled: boolean) => call<boolean>('set_autostart', { enabled });
 export const quitApp = () => call<void>('quit_app');
 
-/** Saves the PDF with the native shell (raw binary IPC – no JSON/base64 overhead). */
-export async function savePdfNative(data: Uint8Array, dir: string, filename: string): Promise<string | undefined> {
+/** Saves a PDF or image with the native shell (raw binary IPC – no JSON/base64 overhead). */
+export async function saveExportNative(data: Uint8Array, dir: string, filename: string): Promise<string | undefined> {
   const c = core();
   if (!c) return undefined;
   try {
-    return await c.invoke<string>('save_pdf', data, {
+    return await c.invoke<string>('save_export', data, {
       headers: { 'x-dir': encodeURIComponent(dir), 'x-filename': encodeURIComponent(filename) },
     });
   } catch (e) {
-    console.warn('[desktop] save_pdf failed', e);
+    console.warn('[desktop] save_export failed', e);
     throw e;
   }
 }
 
+/** Resolve and validate a real Windows path before rendering a batch of JPEGs. */
+export async function pickImageFolder(current: string): Promise<string | null> {
+  const native = core();
+  if (!native) throw new Error('برای انتخاب و بررسی مسیر پوشه، خروجی عکس را در برنامهٔ ویندوز بگیرید.');
+  const folder = await chooseDir(current);
+  return folder ? native.invoke<string>('validate_image_folder', { folder }) : null;
+}
+
 /** Plain browser fallback: normal download. */
-export function downloadBlob(data: Uint8Array, filename: string) {
-  const url = URL.createObjectURL(new Blob([data as Uint8Array<ArrayBuffer>], { type: 'application/pdf' }));
+export function downloadBlob(data: Uint8Array, filename: string, mime = 'application/pdf') {
+  const url = URL.createObjectURL(new Blob([data as Uint8Array<ArrayBuffer>], { type: mime }));
   const a = document.createElement('a');
   a.href = url;
   a.download = filename;

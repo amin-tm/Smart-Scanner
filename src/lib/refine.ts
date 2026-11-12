@@ -186,6 +186,62 @@ export function recoverFrameSpanningPage(image: RGBAImage, quad: Quad): Quad {
     return [{ x: 0, y: 0 }, { x: 1, y: 0 },
         { x: 1, y: bottomAt(1) }, { x: 0, y: bottomAt(0) }];
 }
+
+/** Find opposing paper edges when the other two sides run out of the photo.
+ * A persistent change between surfaces rejects thin printed rules. */
+export function detectFrameSpanningPaper(image: RGBAImage): Quad | undefined {
+    const { width, height, data } = image;
+    const findEdges = (across: number, depth: number, transposed: boolean) => {
+        const gray = (x: number, y: number) => {
+            const i = (transposed ? x * width + y : y * width + x) * 4;
+            return .299 * data[i] + .587 * data[i + 1] + .114 * data[i + 2];
+        };
+        const gap = Math.max(2, Math.round(depth * .004));
+        const edge = (reverse: boolean) => {
+            const points: Pt[] = [];
+            for (let column = 0; column < 32; column++) {
+                const x = Math.round((.035 + .93 * column / 31) * (across - 1));
+                const read = (d: number) => gray(x, reverse ? depth - 1 - d : d);
+                let best = 24;
+                let position = 0;
+                for (let y = 2 * gap; y < depth * .22; y++) {
+                    const inside = Math.min(read(y + gap), read(y + 2 * gap));
+                    const outside = Math.max(read(y - gap), read(y - 2 * gap));
+                    if (inside < 143 || inside - outside <= best) continue;
+                    best = inside - outside;
+                    position = y;
+                }
+                if (position) points.push({ x: x / (across - 1), y: position / (depth - 1) });
+            }
+            let support: Pt[] = [];
+            for (const a of points) for (const b of points) {
+                if (b.x - a.x < .25) continue;
+                const slope = (b.y - a.y) / (b.x - a.x);
+                if (Math.abs(slope) > .16) continue;
+                const nearby = points.filter(p => Math.abs(p.y - a.y - slope * (p.x - a.x)) < .012);
+                if (nearby.length > support.length) support = nearby;
+            }
+            if (support.length < 18 || support[support.length - 1].x - support[0].x < .52) return;
+            const line = fit(support);
+            const at = (x: number) => clamp((line.c - line.nx * x) / line.ny - .007, 0, .24);
+            return { ends: [at(0), at(1)], count: support.length };
+        };
+        const near = edge(false), far = edge(true);
+        if (!near || !far) return;
+        return { near: near.ends, far: far.ends, score: near.count + far.count };
+    };
+    if (Math.min(width, height) < 64) return;
+    const vertical = findEdges(width, height, false);
+    const horizontal = findEdges(height, width, true);
+    if (vertical && (!horizontal || vertical.score >= horizontal.score)) {
+        return [{ x: 0, y: vertical.near[0] }, { x: 1, y: vertical.near[1] },
+            { x: 1, y: 1 - vertical.far[1] }, { x: 0, y: 1 - vertical.far[0] }];
+    }
+    if (horizontal) {
+        return [{ x: horizontal.near[0], y: 0 }, { x: 1 - horizontal.far[0], y: 0 },
+            { x: 1 - horizontal.far[1], y: 1 }, { x: horizontal.near[1], y: 1 }];
+    }
+}
 /** A narrow result can be a table row. Look for printed strokes well beyond
  * its long edges before discarding the rest of the image. */
 export function excludesPrintedContent(image: RGBAImage, quad: Quad): boolean {
@@ -311,4 +367,87 @@ export function recoverVisibleLeftEdge(image: RGBAImage, quad: Quad): Quad {
         { x: bottomX, y: bl.y + bottomSlope * (bottomX - bl.x) },
     ];
     return isConvex(recovered) ? recovered : quad;
+}
+
+/** Find real paper edges when a near-full landscape candidate has borrowed
+ * two image borders. Search only the outer bands, away from printed content. */
+export function recoverLandscapePaperEdges(image: RGBAImage, quad: Quad): Quad {
+    const { width, height, data } = image;
+    const [tl, tr, br, bl] = quad;
+    if (width < height * 1.12 || polygonArea(quad) < .68 ||
+        Math.max(tl.x, bl.x) > .025 || Math.min(bl.y, br.y) < .975 ||
+        Math.max(tl.y, tr.y) > .12 || Math.min(tr.x, br.x) < .78) return quad;
+
+    const lum = (x: number, y: number) => {
+        const i = (y * width + x) * 4;
+        return .299 * data[i] + .587 * data[i + 1] + .114 * data[i + 2];
+    };
+    const rows = 36;
+    function edge(horizontal: boolean, farSide: boolean): Line | null {
+        const across = horizontal ? height : width;
+        const along = horizontal ? width : height;
+        const probe = Math.max(2, Math.round(across * .003));
+        const scan: { point: Pt; weight: number }[][] = [];
+        for (let row = 0; row < rows; row++) {
+            const at = Math.round(along * (.12 + .76 * (row + .5) / rows));
+            const get = (p: number) => horizontal ? lum(at, p) : lum(p, at);
+            const limit = Math.round(across * .135);
+            const start = farSide ? across - limit : probe * 3;
+            const end = farSide ? across - probe * 3 : limit;
+            const choices: { point: Pt; weight: number }[] = [];
+            for (let p = start; p < end; p++) {
+                const near = get(p + probe) - get(p - probe);
+                const wide = get(p + probe * 3) - get(p - probe * 3);
+                if (near * wide <= 0 || Math.abs(near) < 6 || Math.abs(wide) < 10) continue;
+                choices.push({ point: { x: at / along, y: p / across }, weight: Math.min(near * near, wide * wide, 2500) ** .5 });
+            }
+            choices.sort((a, b) => b.weight - a.weight);
+            const peaks: typeof choices = [];
+            for (const choice of choices) {
+                if (peaks.every(p => Math.abs(p.point.y - choice.point.y) > probe * 2 / across)) peaks.push(choice);
+                if (peaks.length === 4) break;
+            }
+            scan.push(peaks);
+        }
+        let best: Pt[] = [], bestScore = 0;
+        for (let i = 0; i < rows; i += 2) for (let j = i + 15; j < rows; j += 2) {
+            for (const a of scan[i]) for (const b of scan[j]) {
+                const slope = (b.point.y - a.point.y) / (b.point.x - a.point.x);
+                if (Math.abs(slope) > .18) continue;
+                const intercept = a.point.y - slope * a.point.x;
+                const inliers: Pt[] = [];
+                let score = 0;
+                for (const row of scan) {
+                    const match = row.find(p => Math.abs(p.point.y - intercept - slope * p.point.x) < .008);
+                    if (match) {
+                        inliers.push(match.point);
+                        score += 1 + Math.min(1, match.weight / 35);
+                    }
+                }
+                if (inliers.length >= 18 && inliers.at(-1)!.x - inliers[0].x > .43 && score > bestScore) {
+                    best = inliers;
+                    bestScore = score;
+                }
+            }
+        }
+        if (!best.length) return null;
+        return fit(best.map(p => horizontal ? p : { x: p.y, y: p.x }));
+    }
+    const left = edge(false, false), right = edge(false, true), bottom = edge(true, true);
+    if (!left || !right || !bottom) return quad;
+    const top = edge(true, false) ?? fit([tl, tr]);
+    const intersect = (a: Line, b: Line): Pt => {
+        const d = a.nx * b.ny - a.ny * b.nx;
+        return { x: (a.c * b.ny - a.ny * b.c) / d, y: (a.nx * b.c - a.c * b.nx) / d };
+    };
+    const points = [intersect(left, top), intersect(top, right), intersect(right, bottom), intersect(bottom, left)];
+    if (points.some(p => !Number.isFinite(p.x + p.y) || p.x < -.025 || p.x > 1.025 || p.y < -.025 || p.y > 1.025)) return quad;
+    // A fold or a printed rule near the top can appear stronger than the
+    // physical edge. Do not move either recovered top corner into the page.
+    for (const corner of points.slice(0, 2)) {
+        const previousY = tl.y + (tr.y - tl.y) * (corner.x - tl.x) / (tr.x - tl.x);
+        corner.y = Math.min(corner.y, previousY);
+    }
+    const result = points.map(p => ({ x: clamp(p.x, 0, 1), y: clamp(p.y, 0, 1) })) as Quad;
+    return isConvex(result) && polygonArea(result) >= .68 ? result : quad;
 }

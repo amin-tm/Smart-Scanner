@@ -84,4 +84,4 @@ fs.writeFileSync(cargoFile, cargo);
 const [owner, repo] = releaseRepo.split('/');
 const output = process.env.GITHUB_OUTPUT;
 if (output) fs.appendFileSync(output, `owner=${owner}\nrepo=${repo}\nversion=${version}\n`);
-console.log(`Configured SmartScanner v${version} with feed at ${releaseRepo}/releases/latest/download/latest.json`);
+console.log(`Configured ${cfg.productName} v${version} with feed at ${releaseRepo}/releases/latest/download/latest.json`);
